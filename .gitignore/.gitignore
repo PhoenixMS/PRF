@@ -1,0 +1,3435 @@
+
+
+SPAN {
+font-family: "Courier New";
+font-size: 10pt;
+color: #000000;
+background: #FFFFFF;
+}
+.L0S31 {
+font-style: italic;
+color: #808080;
+}
+.L0S32 {
+color: #3399FF;
+}
+.L0S33 {
+color: #4DA619;
+}
+.L0S52 {
+color: #0000FF;
+}
+.L0S55 {
+color: #800080;
+}
+.L0S70 {
+color: #808080;
+}
+
+class zcl_prf_powl_feeder definition
+  public
+  final
+  create public .
+
+public section.
+*"* public components of class ZCL_PRF_POWL_FEEDER
+*"* do not include other source files here!!!
+
+  interfaces if_powl_feeder .
+  interfaces if_powl_feeder_ext .
+
+  types:
+    begin of ty_s_selection_criteria,
+        fieldname type string,
+        sign      type  tvarv_sign,
+        option    type  tvarv_opti,
+        low       type  string,
+        high      type  string,
+      end of ty_s_selection_criteria .
+  types:
+    ty_t_selection_criteria type standard table of ty_s_selection_criteria .
+  types:
+    ty_t_headers type standard table of prf_c_header .
+  types:
+    ty_t_items type standard table of prf_c_item .
+  types:
+    begin of ty_s_prf_fld_catalog,
+          data_bind        type prf_powl_src, " H - Header, I - Item, Z - Self
+          source_field     type name_feld,
+          col_data_element type komp_type.
+            include type powl_fieldcat_sty.
+    types: end of ty_s_prf_fld_catalog .
+  types:
+    ty_t_prf_fld_catalog type standard table of ty_s_prf_fld_catalog .
+  types:
+    begin of ty_s_prf_result_flds,
+          result_col_name  type name_feld,
+          data_bind        type prf_powl_src, " H - Header, I - Item, Z - Self
+          source_field     type name_feld,
+          col_data_element type komp_type,
+        end of ty_s_prf_result_flds .
+  types:
+    ty_t_prf_result_flds type standard table of ty_s_prf_result_flds .
+  types:
+    zprf_powl_data_tt type standard table of zprf_powl_data .
+
+  constants ac_admn type ust12-von value 'ADMN'. "#EC NOTEXT
+  constants ac_error_msg type char1 value 'E'. "#EC NOTEXT
+  constants ac_hdr_tabname type string value 'PRF_C_HEADER'. "#EC NOTEXT
+  constants ac_info_msg type char1 value 'I'. "#EC NOTEXT
+  constants ac_item_tabname type string value 'PRF_C_ITEM'. "#EC NOTEXT
+  constants ac_log_object type balobj_d value 'PRF_APPL'. "#EC NOTEXT
+  constants ac_log_sub_object type balsubobj value 'PRF_POWL_LOGS'. "#EC NOTEXT
+  constants ac_publish_tabname type string value 'PRF_C_PUBL_HIST'. "#EC NOTEXT
+  constants ac_status_msg type char1 value 'S'. "#EC NOTEXT
+  constants ac_user type ust12-von value 'USER'. "#EC NOTEXT
+  constants:
+    begin of display_field_as,
+        textview           type powl_display_ty value 'TV',
+        image              type powl_display_ty value 'IM',
+        checkbox           type powl_display_ty value 'CK',
+        dropdown_by_key    type powl_display_ty value 'DK',
+        input_field        type powl_display_ty value 'IN',
+        link_to_url        type powl_display_ty value 'LU',
+        link_to_action     type powl_display_ty value 'LA',
+        button             type powl_display_ty value 'BT',
+        progress_indicator type powl_display_ty value 'PI',
+      end of display_field_as .
+  data at_field_catalog type powl_fieldcat_tty .
+  constants mv_structure type string value 'ZPRF_POWL_DATA'. "#EC NOTEXT
+
+  class-methods authorization_check
+    importing
+      value(is_current_query) type powl_query_sty optional
+      value(iv_object) type ust12-objct default 'PRF_ACCESS'
+      value(iv_field1) type ust12-field default 'PRF_ACCTYP'
+      value(iv_value) type ust12-von
+    returning
+      value(rv_result) type xfeld .
+protected section.
+private section.
+*"* private components of class ZCL_PRF_POWL_FEEDER
+*"* do not include other source files here!!!
+
+  constants ac_msg_id type symsgid value 'PRF_CNTRL_MSG'. "#EC NOTEXT
+  constants ac_rejected type prf_apprv_status value 'X'. "#EC NOTEXT
+  data ar_cust_impl type ref to prf_cl_model_au_helper .
+  data ar_powl_helper type ref to cl_powl_ui_helper .
+  data ar_result_structure type ref to cl_abap_structdescr .
+  data ar_result_table type ref to cl_abap_tabledescr .
+  data at_control_info type prf_cl_ui_scrn_assist=>ty_t_control_data .
+  data at_result_fields type ty_t_prf_result_flds .
+  data at_selcrit_val type powl_selcrit_tty .
+  data av_langu type langu .
+  data av_result_colmn_cnt type sytabix value 0. "#EC NOTEXT .
+  data av_selcrit_values type rsparams_tt .
+  data av_sel_fields type string .
+  data av_type type powl_type_ty .
+  data mt_result type zprf_powl_data_tt .
+  data ms_result type zprf_powl_data .
+
+  class-methods update_powl_messages
+    exporting
+      !et_messages type powl_msg_tty .
+  class-methods update_return_log
+    changing
+      !et_return_log type bapiret2_t .
+  methods add_field_to_fieldcat
+    importing
+      !iv_field type dfies
+      !iv_type type powl_type_ty optional
+      !iv_query type powl_query_ty optional .
+  methods block_publish
+    importing
+      !i_username type xuser optional
+      !i_applid type powl_applid_ty optional
+      !i_type type powl_type_ty optional
+      !i_actionid type powl_actionid_ty optional
+      !i_changed type powl_changeinfo_tty optional
+      !i_action_index like sy-tabix optional
+      !i_action_conf type powl_action_conf_ty optional
+      !i_langu type langu default sy-langu
+      !i_additional_data type data optional
+      !i_visible_fields type powl_visible_cols_tty optional
+    exporting
+      !e_portal_actions type powl_follow_up_sty
+      !e_messages type powl_msg_tty
+      !e_do_refresh type powl_xflag_ty
+      !e_result_lines_changed type powl_xflag_ty
+      !e_changes_processed type powl_xflag_ty
+      !e_selected_changed type powl_xflag_ty
+      !e_actions_changed type powl_xflag_ty
+    changing
+      !c_selected type rstabixtab optional
+      !c_result_tab type index table optional
+      !c_workflow_result_count type powl_count_ty optional
+      !c_action_defs type powl_actdescr_tty optional
+      !c_first_visible_row type sy-tabix optional
+      !c_first_visible_scroll_col type string optional .
+  methods build_fieldcat
+    importing
+      !iv_applid type powl_applid_ty optional
+      !iv_type type powl_type_ty optional
+      !iv_query type powl_query_ty optional
+    exporting
+      value(et_result_field_list) type ty_t_prf_result_flds .
+  methods display_prf
+    importing
+      !i_username type xuser optional
+      !i_applid type powl_applid_ty optional
+      !i_type type powl_type_ty optional
+      !i_actionid type powl_actionid_ty optional
+      !i_changed type powl_changeinfo_tty optional
+      !i_action_index like sy-tabix optional
+      !i_action_conf type powl_action_conf_ty optional
+      !i_langu type langu default sy-langu
+      !i_additional_data type data optional
+      !i_visible_fields type powl_visible_cols_tty optional
+    exporting
+      !e_portal_actions type powl_follow_up_sty
+      !e_messages type powl_msg_tty
+      !e_do_refresh type powl_xflag_ty
+      !e_result_lines_changed type powl_xflag_ty
+      !e_changes_processed type powl_xflag_ty
+      !e_selected_changed type powl_xflag_ty
+      !e_actions_changed type powl_xflag_ty
+    changing
+      !c_selected type rstabixtab optional
+      !c_result_tab type index table optional
+      !c_workflow_result_count type powl_count_ty optional
+      !c_action_defs type powl_actdescr_tty optional
+      !c_first_visible_row type sy-tabix optional
+      !c_first_visible_scroll_col type string optional .
+  methods get_impl_class
+    importing
+      !iv_country type prf_country
+      !iv_cocode type prf_comp_code
+      !iv_regm type prf_config_regm
+      !iv_doc_type type prf_regm_doc_type
+    returning
+      value(rv_class_name) type prf_hlpr_impl_classname .
+  methods lock_record
+    importing
+      !is_header_det type prf_c_header
+    exporting
+      !ev_locking_suceeded type xfeld
+      !et_return type bapiret2_t .
+  methods publish_xml
+    importing
+      !i_username type xuser optional
+      !i_applid type powl_applid_ty optional
+      !i_type type powl_type_ty optional
+      !i_actionid type powl_actionid_ty optional
+      !i_changed type powl_changeinfo_tty optional
+      !i_action_index like sy-tabix optional
+      !i_action_conf type powl_action_conf_ty optional
+      !i_langu type langu default sy-langu
+      !i_additional_data type data optional
+      !i_visible_fields type powl_visible_cols_tty optional
+    exporting
+      !e_portal_actions type powl_follow_up_sty
+      !e_messages type powl_msg_tty
+      !e_do_refresh type powl_xflag_ty
+      !e_result_lines_changed type powl_xflag_ty
+      !e_changes_processed type powl_xflag_ty
+      !e_selected_changed type powl_xflag_ty
+      !e_actions_changed type powl_xflag_ty
+    changing
+      !c_selected type rstabixtab optional
+      !c_result_tab type index table optional
+      !c_workflow_result_count type powl_count_ty optional
+      !c_action_defs type powl_actdescr_tty optional
+      !c_first_visible_row type sy-tabix optional
+      !c_first_visible_scroll_col type string optional .
+  methods ready_publish
+    importing
+      !i_username type xuser optional
+      !i_applid type powl_applid_ty optional
+      !i_type type powl_type_ty optional
+      !i_actionid type powl_actionid_ty optional
+      !i_changed type powl_changeinfo_tty optional
+      !i_action_index like sy-tabix optional
+      !i_action_conf type powl_action_conf_ty optional
+      !i_langu type langu default sy-langu
+      !i_additional_data type data optional
+      !i_visible_fields type powl_visible_cols_tty optional
+    exporting
+      !e_portal_actions type powl_follow_up_sty
+      !e_messages type powl_msg_tty
+      !e_do_refresh type powl_xflag_ty
+      !e_result_lines_changed type powl_xflag_ty
+      !e_changes_processed type powl_xflag_ty
+      !e_selected_changed type powl_xflag_ty
+      !e_actions_changed type powl_xflag_ty
+    changing
+      !c_selected type rstabixtab optional
+      !c_result_tab type index table optional
+      !c_workflow_result_count type powl_count_ty optional
+      !c_action_defs type powl_actdescr_tty optional
+      !c_first_visible_row type sy-tabix optional
+      !c_first_visible_scroll_col type string optional .
+  methods regenerate_xml
+    importing
+      !i_username type xuser optional
+      !i_applid type powl_applid_ty optional
+      !i_type type powl_type_ty optional
+      !i_actionid type powl_actionid_ty optional
+      !i_changed type powl_changeinfo_tty optional
+      !i_action_index like sy-tabix optional
+      !i_action_conf type powl_action_conf_ty optional
+      !i_langu type langu default sy-langu
+      !i_additional_data type data optional
+      !i_visible_fields type powl_visible_cols_tty optional
+    exporting
+      !e_portal_actions type powl_follow_up_sty
+      !e_messages type powl_msg_tty
+      !e_do_refresh type powl_xflag_ty
+      !e_result_lines_changed type powl_xflag_ty
+      !e_changes_processed type powl_xflag_ty
+      !e_selected_changed type powl_xflag_ty
+      !e_actions_changed type powl_xflag_ty
+    changing
+      !c_selected type rstabixtab optional
+      !c_result_tab type index table optional
+      !c_workflow_result_count type powl_count_ty optional
+      !c_action_defs type powl_actdescr_tty optional
+      !c_first_visible_row type sy-tabix optional
+      !c_first_visible_scroll_col type string optional .
+  methods reject
+    importing
+      !i_username type xuser optional
+      !i_applid type powl_applid_ty optional
+      !i_type type powl_type_ty optional
+      !i_actionid type powl_actionid_ty optional
+      !i_changed type powl_changeinfo_tty optional
+      !i_action_index like sy-tabix optional
+      !i_action_conf type powl_action_conf_ty optional
+      !i_langu type langu default sy-langu
+      !i_additional_data type data optional
+      !i_visible_fields type powl_visible_cols_tty optional
+    exporting
+      !e_portal_actions type powl_follow_up_sty
+      !e_messages type powl_msg_tty
+      !e_do_refresh type powl_xflag_ty
+      !e_result_lines_changed type powl_xflag_ty
+      !e_changes_processed type powl_xflag_ty
+      !e_selected_changed type powl_xflag_ty
+      !e_actions_changed type powl_xflag_ty
+    changing
+      !c_selected type rstabixtab optional
+      !c_result_tab type index table optional
+      !c_workflow_result_count type powl_count_ty optional
+      !c_action_defs type powl_actdescr_tty optional
+      !c_first_visible_row type sy-tabix optional
+      !c_first_visible_scroll_col type string optional .
+  methods unlock_record
+    importing
+      !iv_doc_type type prf_regm_doc_type
+      !iv_hdr_key type prf_s_header-header_key
+      !iv_doc_no type prf_regm_doc_no .
+endclass.
+
+
+
+class zcl_prf_powl_feeder implementation.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->ADD_FIELD_TO_FIELDCAT
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_FIELD                       TYPE        DFIES
+* | [--->] IV_TYPE                        TYPE        POWL_TYPE_TY(optional)
+* | [--->] IV_QUERY                       TYPE        POWL_QUERY_TY(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method add_field_to_fieldcat.
+  data: ls_out_fieldcat type powl_fieldcat_sty.
+  data: ls_cust_fieldcat type zprf_powl_fcat.
+
+  define add_colpos.
+    add 1 to av_result_colmn_cnt.
+    ls_out_fieldcat-colpos = av_result_colmn_cnt.
+  end-of-definition.
+
+  ls_out_fieldcat-colid = iv_field-fieldname.
+  add_colpos.
+*  default for all fields
+  ls_out_fieldcat-col_visible    = abap_true."visible
+  ls_out_fieldcat-allow_sort     = abap_true."sortable
+  ls_out_fieldcat-allow_filter   = abap_true."filter
+  ls_out_fieldcat-editable       = abap_false."editable
+  ls_out_fieldcat-enabled        = abap_true.
+  ls_out_fieldcat-technical_col  = abap_false.
+  ls_out_fieldcat-fixed          = abap_true.
+  ls_out_fieldcat-width          = iv_field-outputlen.
+* Customizing for any field that defaults are not suitable
+
+  if iv_type is initial.
+    select single * from zprf_powl_fcat into ls_cust_fieldcat
+        where  colid  = ls_out_fieldcat-colid and
+               query      = iv_query.
+
+  else.
+    select single * from zprf_powl_fcat into ls_cust_fieldcat
+        where type = iv_type and
+              colid  = ls_out_fieldcat-colid and
+              query      = iv_query.
+      if sy-subrc ne 0.
+        select single * from zprf_powl_fcat into ls_cust_fieldcat
+        where colid  = ls_out_fieldcat-colid and
+              type = iv_type.
+      endif.
+
+  endif.
+
+  if sy-subrc eq 0.
+    if ls_cust_fieldcat-colpos is not initial.
+      move ls_cust_fieldcat-colpos to ls_out_fieldcat-colpos.
+    endif.
+    if ls_cust_fieldcat-width is not initial.
+      move ls_cust_fieldcat-width to ls_out_fieldcat-width.
+    endif.
+    if ls_cust_fieldcat-header is not initial.
+      move ls_cust_fieldcat-header to ls_out_fieldcat-header.
+    endif.
+    if ls_cust_fieldcat-colpos is not initial.
+      move ls_cust_fieldcat-colpos   to ls_out_fieldcat-colpos.
+    endif.
+    if ls_cust_fieldcat-display_type is not initial.
+      move ls_cust_fieldcat-display_type to ls_out_fieldcat-display_type.
+    endif.
+    if ls_cust_fieldcat-sort_order is not initial.
+      move ls_cust_fieldcat-sort_order to ls_out_fieldcat-sort_order.
+    endif.
+
+    move ls_cust_fieldcat-col_visible  to ls_out_fieldcat-col_visible.
+
+  endif.
+
+  case ls_out_fieldcat-colid.
+*    WHEN 'MANDT' OR 'HEADER_KEY'.
+*      ls_out_fieldcat-col_visible = abap_false.
+    when 'PRF_ID'.
+      ls_out_fieldcat-header = text-005.
+      ls_out_fieldcat-display_type = prf_if_powl_helper=>display_field_as-link_to_action.
+      ls_out_fieldcat-text_ref = 'PRF_ID'.
+      ls_out_fieldcat-h_align = 'C'. " Align Center
+      ls_out_fieldcat-editable = abap_true.
+      ls_out_fieldcat-colpos = 1.
+*    WHEN 'DEL_IND'.
+**      ls_out_fieldcat-display_type = prf_if_powl_helper=>display_field_as-image.
+**      ls_out_fieldcat-icon_src_ref = 'DEL_IND'.
+***      ls_out_fieldcat-header = text-009.
+**      ls_out_fieldcat-colpos = 8.
+**      ls_out_fieldcat-tooltip = text-009.
+    when 'PO_GRP'.
+      ls_out_fieldcat-display_type = zcl_prf_powl_utilities=>display_field_as-dropdown_by_key.
+      ls_out_fieldcat-valid_values = zcl_prf_powl_utilities=>value_purch_group( ).
+
+    when 'STATUS'.
+      ls_out_fieldcat-display_type = zcl_prf_powl_utilities=>display_field_as-dropdown_by_key.
+      ls_out_fieldcat-valid_values = zcl_prf_powl_utilities=>value_doc_status( ).
+
+    when 'SRC_DOC_TYP'.
+      ls_out_fieldcat-display_type = zcl_prf_powl_utilities=>display_field_as-dropdown_by_key.
+      ls_out_fieldcat-valid_values = zcl_prf_powl_utilities=>value_doc_source( ).
+      ls_out_fieldcat-colpos = 5.
+    when others.
+      " Do nothing.
+  endcase.
+  "inserting fields into attribute table at_field_catalog.
+  insert ls_out_fieldcat into table at_field_catalog.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_PRF_POWL_FEEDER=>AUTHORIZATION_CHECK
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_CURRENT_QUERY               TYPE        POWL_QUERY_STY(optional)
+* | [--->] IV_OBJECT                      TYPE        UST12-OBJCT (default ='PRF_ACCESS')
+* | [--->] IV_FIELD1                      TYPE        UST12-FIELD (default ='PRF_ACCTYP')
+* | [--->] IV_VALUE                       TYPE        UST12-VON
+* | [<-()] RV_RESULT                      TYPE        XFELD
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method authorization_check.
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+
+   authority-check object iv_object     " PRF_ACCESS
+            id            iv_field1                " PRF_ACCTYP
+            field         iv_value.
+   if sy-subrc eq 0.
+        rv_result = abap_true.
+   endif.
+
+  try.
+      get badi lr_badi_ref.
+
+        call badi lr_badi_ref->custom_authorization_check
+          exporting
+            is_current_query = is_current_query    " query definitions
+            iv_user          = sy-uname   " User Name in User Master Record
+            iv_object        = iv_object   " Authorization Object
+            iv_field1        = iv_field1   " Authorization Field
+            iv_value         = iv_value   " Authorization Value
+          changing
+            cv_result        = rv_result.    " Checkbox
+      catch cx_badi_not_implemented
+                     cx_root.
+                                           "#EC NO_HANDLER
+  endtry.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->BLOCK_PUBLISH
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER(optional)
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY(optional)
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY(optional)
+* | [--->] I_ACTIONID                     TYPE        POWL_ACTIONID_TY(optional)
+* | [--->] I_CHANGED                      TYPE        POWL_CHANGEINFO_TTY(optional)
+* | [--->] I_ACTION_INDEX                 LIKE        SY-TABIX(optional)
+* | [--->] I_ACTION_CONF                  TYPE        POWL_ACTION_CONF_TY(optional)
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_ADDITIONAL_DATA              TYPE        DATA(optional)
+* | [--->] I_VISIBLE_FIELDS               TYPE        POWL_VISIBLE_COLS_TTY(optional)
+* | [<---] E_PORTAL_ACTIONS               TYPE        POWL_FOLLOW_UP_STY
+* | [<---] E_MESSAGES                     TYPE        POWL_MSG_TTY
+* | [<---] E_DO_REFRESH                   TYPE        POWL_XFLAG_TY
+* | [<---] E_RESULT_LINES_CHANGED         TYPE        POWL_XFLAG_TY
+* | [<---] E_CHANGES_PROCESSED            TYPE        POWL_XFLAG_TY
+* | [<---] E_SELECTED_CHANGED             TYPE        POWL_XFLAG_TY
+* | [<---] E_ACTIONS_CHANGED              TYPE        POWL_XFLAG_TY
+* | [<-->] C_SELECTED                     TYPE        RSTABIXTAB(optional)
+* | [<-->] C_RESULT_TAB                   TYPE        INDEX TABLE(optional)
+* | [<-->] C_WORKFLOW_RESULT_COUNT        TYPE        POWL_COUNT_TY(optional)
+* | [<-->] C_ACTION_DEFS                  TYPE        POWL_ACTDESCR_TTY(optional)
+* | [<-->] C_FIRST_VISIBLE_ROW            TYPE        SY-TABIX(optional)
+* | [<-->] C_FIRST_VISIBLE_SCROLL_COL     TYPE        STRING(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method block_publish.
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+  data: ls_prf_chng_trig type prf_chng_trig,
+        lruid_ex         type ref to cx_uuid_error.
+*
+  types: begin of lty_s_headers,
+           header_key type prf_s_header-header_key,
+           vers_no    type prf_s_item-vers_no,
+           status     type prf_s_header-status,
+         end of lty_s_headers,
+         lty_t_headers type standard table of lty_s_headers.
+*  TYPES: BEGIN OF lty_s_publish,
+*           header_key TYPE prf_s_header-header_key,
+*           prf_id     TYPE prf_s_header-prf_id,
+*           vers_no    TYPE prf_s_item-vers_no,
+*           payload_id TYPE prf_c_publ_hist-payload_id,
+*         END OF  lty_s_publish,
+*         lty_t_publish TYPE STANDARD TABLE OF lty_s_publish.
+
+  data: lr_appl_log        type ref to prf_cl_appl_log,
+        lt_headers         type lty_t_headers,
+        ls_headers         type lty_s_headers,
+        lt_published_det   type standard table of prf_c_publ_hist,
+        lt_headers_det     type standard table of prf_c_header,
+        lt_items_det       type standard table of prf_c_item,
+        lt_headers_final   type standard table of prf_c_header,
+        lt_items_final     type standard table of prf_c_item,
+        lt_return          type bapiret2_t,
+        lt_return_log      type bapiret2_t,
+        ls_msg             type powl_msg_sty,
+        ls_published_det   type prf_c_publ_hist,
+        ls_return          type bapiret2,
+        lv_payid           type string,
+        lv_timetmp         type string,
+        lv_timestamp       type timestamp,
+        lv_cust_impl_class type prf_hlpr_impl_classname,
+        lv_lock_success    type xfeld,
+        lv_calling_source  type prf_call_source,
+        lv_badi            type ref to prf_powl_publish_action,
+        lt_payloadid       type standard table of prf_c_publ_hist-payload_id,
+        lv_payloadid       type prf_c_publ_hist-payload_id,
+*        ls_publish         TYPE lty_s_publish,
+*        lt_publish         TYPE lty_t_publish,
+*        lt_pub_hist_rec    TYPE lty_t_publish,
+        ls_header_repub    type prf_c_header,
+        ls_item_repub      type prf_c_item,
+        lt_header_repub    type standard table of prf_c_header,
+        lt_item_repub      type standard table of prf_c_item,
+        lv_timestmp        type string,
+        lt_prf_publ_hist   type standard table of prf_c_publ_hist,
+        lv_indx            type sytabix,
+        ls_prf_publ_hist   type prf_c_publ_hist,
+        lv_payload_id      type string.
+
+  data: lv_test_run  type abap_bool.
+
+  data: ls_message_string  type string.
+
+  field-symbols: <ls_any>        type any,
+                 <lv_any_field>  type any,
+                 <ls_selected>   type rstabix,
+                 <ls_header_det> type prf_c_header,
+*                 <ls_publish>    TYPE lty_s_publish,
+                 <ls_pub_hdr>    type prf_c_publ_hist,
+                 <ls_item_det>   type prf_c_item.
+
+  field-symbols: <ls_read>      type any.
+  field-symbols:<ls_powl_action> type powl_actdescr_sty.
+  loop at c_selected assigning <ls_selected>.
+
+    read table c_result_tab assigning <ls_read>
+                index <ls_selected>-tabix.
+    check sy-subrc eq 0.
+    assign component 'HEADER_KEY' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-header_key = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    assign component 'LATEST_VERSION' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-vers_no = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    assign component 'STATUS' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-status = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    append ls_headers to lt_headers.
+  endloop.
+  clear c_selected.
+
+  if lt_headers[] is not initial.
+    convert date sy-datum time sy-uzeit into time stamp lv_timestamp time zone sy-zonlo.
+    select * from prf_c_header into table lt_headers_det for all entries in lt_headers
+                               where header_key = lt_headers-header_key.
+    if sy-subrc = 0 and lt_headers_det[] is not initial.
+      select * from prf_c_item into table lt_items_det for all entries in lt_headers_det
+                               where header_key = lt_headers_det-header_key and vers_no = lt_headers_det-latest_vers.
+      if sy-subrc ne 0.
+        message e106(prf_cntrl_msg) into ls_message_string.
+        update_powl_messages( importing et_messages = e_messages ).
+        return.
+      endif.
+    endif.
+
+    loop at lt_headers_det assigning <ls_header_det>.
+      ls_return-id = ac_msg_id.
+      ls_return-type = ac_info_msg.
+      ls_return-number = '017'.
+      ls_return-message_v1 = <ls_header_det>-header_key.
+      ls_return-message_v2 = <ls_header_det>-latest_vers.
+      ls_return-message_v3 = <ls_header_det>-src_doc_typ.
+      ls_return-message_v4 = <ls_header_det>-doc_no.
+      append ls_return to lt_return_log.
+      if 1 = 2."never going to happen, just for identifying error/status message from message class.
+        message i017(prf_cntrl_msg) with ls_msg-message_v1 ls_msg-message_v2 ls_msg-message_v3 ls_msg-message_v4.
+      endif.
+      clear ls_return.
+      read table lt_items_det assigning <ls_item_det> with key header_key = <ls_header_det>-header_key vers_no = <ls_header_det>-latest_vers.
+      if sy-subrc ne 0.
+        ls_return-id = ac_msg_id.
+        ls_return-type = ac_error_msg.
+        ls_return-number = '018'.
+        ls_return-message_v1 = <ls_header_det>-header_key.
+        ls_return-message_v2 = <ls_header_det>-latest_vers.
+        ls_return-message_v3 = <ls_header_det>-src_doc_typ.
+        ls_return-message_v4 = <ls_header_det>-doc_no.
+        append ls_return to lt_return_log.
+        if 1 = 2."never going to happen, just for identifying error/status message from message class.
+          message e018(prf_cntrl_msg) with ls_msg-message_v1 ls_msg-message_v2 ls_msg-message_v3 ls_msg-message_v4.
+        endif.
+        clear ls_return.
+        continue.
+      endif.
+
+      lv_calling_source = prf_if_cust_helper=>prf_save_source-manual.
+
+      lv_cust_impl_class = get_impl_class(
+                               iv_country    = <ls_header_det>-country
+                               iv_cocode     = <ls_header_det>-compcode
+                               iv_regm       = <ls_header_det>-prf_regm
+                               iv_doc_type   = <ls_header_det>-src_doc_typ
+                           ).
+
+      prf_cl_ui_scrn_assist=>decide_record_status(
+        exporting
+          iv_appl_run_mode   =  prf_if_cust_helper=>prf_appl_mode-edit   " Application mode
+          iv_call_source     =  lv_calling_source                        " Calling Source for Deciding status
+          iv_cust_impl_class =  lv_cust_impl_class
+          is_node_hdr_data   =  <ls_header_det>                             " Header table of PRF
+          is_node_item_data  =  <ls_item_det>                               " Item table for PRF
+        importing
+          ev_new_status      =  <ls_header_det>-status                " Status of PRF
+          ev_status_save     =  <ls_header_det>-saved_status_int      " Status of PRF
+          ev_publish_status  =  <ls_header_det>-published             " Checkbox
+          et_return          =  lt_return                           " Return parameter table
+      ).
+
+      append lines of lt_return to lt_return_log.
+      read table lt_return with key type = ac_error_msg transporting no fields.
+      if sy-subrc = 0.
+        refresh lt_return.
+        continue.
+      endif.
+
+      " Lock the source documents & prf record before doing processing.
+      call method me->lock_record
+        exporting
+          is_header_det       = <ls_header_det>
+        importing
+          et_return           = lt_return
+          ev_locking_suceeded = lv_lock_success.
+      append lines of lt_return to lt_return_log.
+
+      if lv_lock_success = abap_true.
+        <ls_header_det>-changed_by = sy-uname.
+        <ls_header_det>-changed_at = lv_timestamp.
+        append <ls_header_det> to lt_headers_final.
+        append <ls_item_det> to lt_items_final.
+      endif.
+    endloop.
+
+    " At this place we have all the records in table lt_headers_final and lt_items_final which was successfully locked and also new status determination was successful
+    " so clear the old tables to free up memory
+    refresh: lt_headers_det, lt_items_det, lt_headers.
+
+    if lt_headers_final[] is not initial.
+      modify prf_c_header from table lt_headers_final.
+      if sy-subrc = 0.
+        message s022(prf_cntrl_msg) into ls_message_string.
+        update_powl_messages( importing et_messages = e_messages ).
+        ls_return-id = ls_msg-msgid.
+        ls_return-type = ls_msg-msgtype.
+        ls_return-number = ls_msg-msgnumber.
+        append ls_return to lt_return_log.
+        clear ls_return.
+        e_do_refresh = 'X'.
+      else.
+        rollback work.
+        message e010(prf_cntrl_msg) into ls_message_string.
+        update_powl_messages( importing et_messages = e_messages ).
+
+        ls_return-id = ls_msg-msgid.
+        ls_return-type = ls_msg-msgtype.
+        ls_return-number = ls_msg-msgnumber.
+        append ls_return to lt_return_log.
+        clear ls_return.
+      endif.
+
+      loop at lt_headers_final assigning <ls_header_det>.
+        call method me->unlock_record
+          exporting
+            iv_doc_type = <ls_header_det>-src_doc_typ
+            iv_hdr_key  = <ls_header_det>-header_key
+            iv_doc_no   = <ls_header_det>-doc_no.
+      endloop.
+    else.
+      message e020(prf_cntrl_msg) into ls_message_string.
+      update_powl_messages( importing et_messages = e_messages ).
+      return.
+      ls_return-id = ls_msg-msgid.
+      ls_return-type = ls_msg-msgtype.
+      ls_return-number = ls_msg-msgnumber.
+      ls_return-message_v1 = ls_msg-message_v1.
+      append ls_return to lt_return_log.
+      clear ls_return.
+    endif.
+* End Enhancement
+    if lt_return_log[] is not initial and lr_appl_log is bound.
+      lr_appl_log->add_bapi_messages(
+        exporting
+          it_messages      = lt_return_log    " Return parameter table
+      ).
+      lr_appl_log->finalize_and_save( ).
+      refresh lt_return_log.
+    endif.
+  else.
+    message e024(prf_cntrl_msg) into ls_message_string.
+    update_powl_messages( importing et_messages = e_messages ).
+    return.
+  endif.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->BUILD_FIELDCAT
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_APPLID                      TYPE        POWL_APPLID_TY(optional)
+* | [--->] IV_TYPE                        TYPE        POWL_TYPE_TY(optional)
+* | [--->] IV_QUERY                       TYPE        POWL_QUERY_TY(optional)
+* | [<---] ET_RESULT_FIELD_LIST           TYPE        TY_T_PRF_RESULT_FLDS
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method build_fieldcat.
+
+  data: lr_attribute    type ref to cl_abap_typedescr,
+        lr_strctref     type ref to cl_abap_structdescr,
+        lt_fieldlist    type ddfields,
+        ls_result_field type ty_s_prf_result_flds,
+        lv_ins_fc       type xfeld,
+        lv_tmp_str      type string.
+
+  field-symbols : <ls_fieldlist> type dfies.
+
+  " Empty result field table
+  refresh et_result_field_list.
+
+  " Get structure of Header table .
+  call method cl_abap_structdescr=>describe_by_name
+    exporting
+      p_name      = mv_structure
+    receiving
+      p_descr_ref = lr_attribute.
+
+  lr_strctref ?= lr_attribute.
+
+  " Get the attribbutes/fields of Header table structure
+  call method lr_strctref->get_ddic_field_list
+    exporting
+      p_langu                  = sy-langu
+      p_including_substructres = abap_true
+    receiving
+      p_field_list             = lt_fieldlist.
+
+  " Loop at the fields and create the fieldlist.
+  loop at lt_fieldlist assigning <ls_fieldlist>.
+    add_field_to_fieldcat( iv_type = iv_type iv_field = <ls_fieldlist> iv_query = iv_query ).
+  endloop.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->DISPLAY_PRF
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER(optional)
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY(optional)
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY(optional)
+* | [--->] I_ACTIONID                     TYPE        POWL_ACTIONID_TY(optional)
+* | [--->] I_CHANGED                      TYPE        POWL_CHANGEINFO_TTY(optional)
+* | [--->] I_ACTION_INDEX                 LIKE        SY-TABIX(optional)
+* | [--->] I_ACTION_CONF                  TYPE        POWL_ACTION_CONF_TY(optional)
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_ADDITIONAL_DATA              TYPE        DATA(optional)
+* | [--->] I_VISIBLE_FIELDS               TYPE        POWL_VISIBLE_COLS_TTY(optional)
+* | [<---] E_PORTAL_ACTIONS               TYPE        POWL_FOLLOW_UP_STY
+* | [<---] E_MESSAGES                     TYPE        POWL_MSG_TTY
+* | [<---] E_DO_REFRESH                   TYPE        POWL_XFLAG_TY
+* | [<---] E_RESULT_LINES_CHANGED         TYPE        POWL_XFLAG_TY
+* | [<---] E_CHANGES_PROCESSED            TYPE        POWL_XFLAG_TY
+* | [<---] E_SELECTED_CHANGED             TYPE        POWL_XFLAG_TY
+* | [<---] E_ACTIONS_CHANGED              TYPE        POWL_XFLAG_TY
+* | [<-->] C_SELECTED                     TYPE        RSTABIXTAB(optional)
+* | [<-->] C_RESULT_TAB                   TYPE        INDEX TABLE(optional)
+* | [<-->] C_WORKFLOW_RESULT_COUNT        TYPE        POWL_COUNT_TY(optional)
+* | [<-->] C_ACTION_DEFS                  TYPE        POWL_ACTDESCR_TTY(optional)
+* | [<-->] C_FIRST_VISIBLE_ROW            TYPE        SY-TABIX(optional)
+* | [<-->] C_FIRST_VISIBLE_SCROLL_COL     TYPE        STRING(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method display_prf.
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+  data: ls_prf_chng_trig type prf_chng_trig,
+        lruid_ex         type ref to cx_uuid_error.
+*
+  types: begin of lty_s_headers,
+           header_key type prf_s_header-header_key,
+           vers_no    type prf_s_item-vers_no,
+           status     type prf_s_header-status,
+         end of lty_s_headers,
+         lty_t_headers type standard table of lty_s_headers.
+*  TYPES: BEGIN OF lty_s_publish,
+*           header_key TYPE prf_s_header-header_key,
+*           prf_id     TYPE prf_s_header-prf_id,
+*           vers_no    TYPE prf_s_item-vers_no,
+*           payload_id TYPE prf_c_publ_hist-payload_id,
+*         END OF  lty_s_publish,
+*         lty_t_publish TYPE STANDARD TABLE OF lty_s_publish.
+
+  data: lr_appl_log        type ref to prf_cl_appl_log,
+        lt_headers         type lty_t_headers,
+        ls_headers         type lty_s_headers,
+*        lt_published_det   TYPE STANDARD TABLE OF prf_c_publ_hist,
+        lt_headers_det     type standard table of prf_c_header,
+        lt_items_det       type standard table of prf_c_item,
+        lt_headers_final   type standard table of prf_c_header,
+        lt_items_final     type standard table of prf_c_item,
+        lt_return          type bapiret2_t,
+        lt_return_log      type bapiret2_t,
+        ls_msg             type powl_msg_sty,
+*        ls_published_det   TYPE prf_c_publ_hist,
+        ls_return          type bapiret2,
+        lv_payid           type string,
+        lv_timetmp         type string,
+        lv_timestamp       type timestamp,
+        lv_cust_impl_class type prf_hlpr_impl_classname,
+        lv_lock_success    type xfeld,
+        lv_calling_source  type prf_call_source,
+        lv_badi            type ref to prf_powl_publish_action,
+        lt_payloadid       type standard table of prf_c_publ_hist-payload_id,
+        lv_payloadid       type prf_c_publ_hist-payload_id,
+*        ls_publish         TYPE lty_s_publish,
+*        lt_publish         TYPE lty_t_publish,
+*        lt_pub_hist_rec    TYPE lty_t_publish,
+        ls_header_repub    type prf_c_header,
+        ls_item_repub      type prf_c_item,
+        lt_header_repub    type standard table of prf_c_header,
+        lt_item_repub      type standard table of prf_c_item,
+        lv_timestmp        type string,
+        lt_prf_publ_hist   type standard table of prf_c_publ_hist,
+        lv_indx            type sytabix,
+        ls_prf_publ_hist   type prf_c_publ_hist,
+        lv_payload_id      type string.
+
+  data: lv_test_run  type abap_bool.
+
+  data: ls_message_string  type string.
+
+  field-symbols: <ls_any>        type any.
+  field-symbols: <lv_any_field>  type any.
+**                 <ls_selected>   TYPE rstabix,
+**                 <ls_header_det> TYPE prf_c_header,
+**                 <ls_publish>    TYPE lty_s_publish,
+**                 <ls_pub_hdr>    TYPE prf_c_publ_hist,
+**                 <ls_item_det>   TYPE prf_c_item.
+
+  field-symbols: <ls_read>      type any.
+  field-symbols:<ls_powl_action> type powl_actdescr_sty.
+
+  data: lv_dtype     type prf_regm_doc_type,
+        lv_comp_code type prf_comp_code,
+        lv_co_code   type prf_co_code,
+        lv_chng      type xfeld value abap_false, "For display
+        lv_cntry     type land1,
+        lv_header    type prf_rec_guid,
+        lv_vers_no   type prf_vers_no,
+        lv_doc_no    type prf_regm_doc_no,
+        lv_powl_trg  type xfeld.
+
+  if i_action_index is not initial.
+    read table c_result_tab assigning <ls_any> index i_action_index.
+  endif.
+
+  if <ls_any> is assigned.
+    assign component 'HEADER_KEY' of structure <ls_any> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      lv_header = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    assign component 'VERS_NO' of structure <ls_any> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      lv_vers_no = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    assign component 'REF_DOC_TYPE' of structure <ls_any> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      lv_dtype = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    assign component 'REF_DOC_NO' of structure <ls_any> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      lv_doc_no = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    unassign <ls_any>.
+  endif.
+
+  " call the trigger process.
+  select single country compcode from prf_c_header into (lv_cntry, lv_comp_code)
+          where header_key = lv_header.
+  lv_co_code = lv_comp_code.
+
+  lv_chng = abap_true. "To Edit
+  lv_powl_trg = abap_true.
+
+  call method prf_cl_ui_scrn_assist=>trigger_prf_capture
+    exporting
+      iv_country             = lv_cntry    " Country Key
+      iv_co_code             = lv_co_code  " PRF Co-Code
+      iv_doc_type            = lv_dtype    " Regime Document type
+      iv_doc_no              = lv_doc_no    " Source Document number
+      iv_open_in_change_mode = lv_chng     " Application mode
+      iv_hdr_key             = lv_header
+      iv_version             = lv_vers_no
+      iv_powl_trg            = lv_powl_trg
+      iv_po_trg              = abap_false
+    importing
+      et_return              = lt_return.    " Return Parameter
+   e_do_refresh = abap_true.
+  "Procurement data UI not required for Doc typ &1, Co-code &2
+  loop at lt_return into ls_return.
+    ls_msg-msgid = ls_return-id.
+    ls_msg-msgtype = ls_return-type.
+    ls_msg-msgnumber = ls_return-number.
+    ls_msg-message_v1 = ls_return-message_v1.
+    ls_msg-message_v2 = ls_return-message_v2.
+    append ls_msg to e_messages.
+  endloop.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->GET_IMPL_CLASS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_COUNTRY                     TYPE        PRF_COUNTRY
+* | [--->] IV_COCODE                      TYPE        PRF_COMP_CODE
+* | [--->] IV_REGM                        TYPE        PRF_CONFIG_REGM
+* | [--->] IV_DOC_TYPE                    TYPE        PRF_REGM_DOC_TYPE
+* | [<-()] RV_CLASS_NAME                  TYPE        PRF_HLPR_IMPL_CLASSNAME
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method get_impl_class.
+    field-symbols: <ls_control_info> type prf_cl_ui_scrn_assist=>ty_s_control_data.
+    if at_control_info[] is initial.
+      prf_cl_bapi_util=>read_control_data_info( importing et_control_data = at_control_info ).
+    endif.
+    read table at_control_info assigning <ls_control_info> with key country = iv_country doc_type = iv_doc_type prf_regm = iv_regm co_code = iv_cocode.
+    if sy-subrc = 0.
+      rv_class_name = <ls_control_info>-cust_scrn_helper_class.
+    else.
+      read table at_control_info assigning <ls_control_info> with key country = iv_country doc_type = iv_doc_type prf_regm = iv_regm co_code = '0000'.
+      if sy-subrc = 0.
+        rv_class_name = <ls_control_info>-cust_scrn_helper_class.
+      else.
+        clear rv_class_name.
+      endif.
+    endif.
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER_EXT~CHECK_SELCRIT_VALUES
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_CRIT_PARA                    TYPE        RSPARAMS_TT
+* | [--->] I_USERNAME                     TYPE        XUSER
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [<---] E_IS_INVALID                   TYPE        POWL_XFLAG_TY
+* | [<---] E_MESSAGES                     TYPE        POWL_MSG_TTY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder_ext~check_selcrit_values.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER_EXT~GET_UI_PERIPHERALS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_UIHAT                        TYPE        CHAR4 (default ='WDYA')
+* | [<---] E_UI_COMP                      TYPE        POWL_NAMEVALUE_TTY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder_ext~get_ui_peripherals.
+  data: ls_ui_comp type powl_namevalue_sty.
+
+  case i_uihat.
+    when if_powl_feeder_ext=>c_uihat_wdya.
+      clear ls_ui_comp.
+      ls_ui_comp-key = if_powl_feeder_ext=>c_popup_comp.
+      ls_ui_comp-value = 'ZPRF_POWL_REASON_POPUP'.
+      append ls_ui_comp to e_ui_comp.
+    when others.
+      return.
+  endcase.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER~GET_ACTIONS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_SELCRIT_PARA                 TYPE        RSPARAMS_TT
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [<---] E_ACTIONS_CHANGED              TYPE        POWL_XFLAG_TY
+* | [<-->] C_ACTION_DEFS                  TYPE        POWL_ACTDESCR_TTY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder~get_actions.
+  data: lr_model       type ref to cl_powl_model,
+        lr_powl_helper type ref to cl_powl_ui_helper.
+  data: lr_badi_ref        type ref to zprf_powl_enhancements.
+
+  data: lt_powl_actions    type table of powl_actdescr_sty.
+  data:  ls_visible_query   type powl_query_sty.
+  data:  ls_powl_actions    type powl_actdescr_sty.
+*          lv_actions_changed TYPE powl_xflag_ty,
+  data:    lv_result          type xfeld.
+  data: ls_selcrit type rsparams.
+
+  c_action_defs = c_action_defs.
+  call method cl_powl_runtime_services=>get_current_query
+    receiving
+      rs_query = ls_visible_query.
+
+
+  loop at i_selcrit_para into ls_selcrit where selname =  'USERONLY'.
+    if ls_selcrit-low eq abap_true.
+      return.
+    endif.
+  endloop.
+
+  authority-check object 'PRF_ACCESS'
+           id 'PRF_ACCTYP' field prf_if_powl_helper=>ac_admn.
+  if sy-subrc eq 0.
+    lv_result = abap_true.
+  endif.
+
+  if lv_result eq abap_true.
+
+    read table c_action_defs into ls_powl_actions
+                         with table key actionid = zcl_prf_powl_utilities=>gc_action_publish.
+    if sy-subrc = 0.
+      append ls_powl_actions to lt_powl_actions.
+    else.
+      ls_powl_actions-actionid      = zcl_prf_powl_utilities=>gc_action_publish.
+      ls_powl_actions-cardinality   = 'I'.
+      ls_powl_actions-placement     = 'B'.
+      ls_powl_actions-enabled       = abap_false.
+*      ls_powl_actions-imagesource   = '~Icon/Permit'.
+      ls_powl_actions-placementindx = 6.
+      ls_powl_actions-tooltip = text-001.
+      ls_powl_actions-text = text-001.
+      append ls_powl_actions to lt_powl_actions.
+    endif.
+*
+    read table c_action_defs into ls_powl_actions
+                       with table key actionid = zcl_prf_powl_utilities=>gc_action_reject.
+
+    if sy-subrc = 0.
+      append ls_powl_actions to lt_powl_actions.
+    else.
+      ls_powl_actions-actionid      = zcl_prf_powl_utilities=>gc_action_reject.
+      ls_powl_actions-cardinality   = 'I'.
+      ls_powl_actions-placement     = 'B'.
+      ls_powl_actions-enabled       = abap_false..
+*      ls_powl_actions-imagesource   = '~Icon/Reject'.
+      ls_powl_actions-placementindx = 8.
+      ls_powl_actions-tooltip = text-002.
+      ls_powl_actions-text = text-002.
+      append ls_powl_actions to lt_powl_actions.
+    endif.
+*
+    read table c_action_defs into ls_powl_actions
+                 with table key actionid = zcl_prf_powl_utilities=>gc_action_ready.
+    if sy-subrc  = 0.
+      append ls_powl_actions to lt_powl_actions.
+    else.
+      ls_powl_actions-actionid      = zcl_prf_powl_utilities=>gc_action_ready.
+      ls_powl_actions-cardinality   = 'I'.
+      ls_powl_actions-placement     = 'B'.
+      ls_powl_actions-enabled       = abap_false.
+*      ls_powl_actions-imagesource   = '~Icon/CheckedOk'.
+      ls_powl_actions-placementindx = 1.
+      ls_powl_actions-tooltip = text-003.
+      ls_powl_actions-text = text-003.
+      append ls_powl_actions to lt_powl_actions.
+    endif.
+
+    read table c_action_defs into ls_powl_actions
+                 with table key actionid = zcl_prf_powl_utilities=>gc_action_test_xml.
+    if sy-subrc  = 0.
+      append ls_powl_actions to lt_powl_actions.
+    else.
+      ls_powl_actions-actionid      = zcl_prf_powl_utilities=>gc_action_test_xml.
+      ls_powl_actions-cardinality   = 'I'.
+      ls_powl_actions-placement     = 'B'.
+      ls_powl_actions-enabled       = abap_false.
+*      ls_powl_actions-imagesource   = '~Icon/XmlFile'.
+      ls_powl_actions-placementindx = 7.
+      ls_powl_actions-tooltip = text-024.
+      ls_powl_actions-text = text-024.
+      append ls_powl_actions to lt_powl_actions.
+    endif.
+
+    read table c_action_defs into ls_powl_actions
+                with table key actionid = zcl_prf_powl_utilities=>gc_action_block.
+    if sy-subrc  = 0.
+      append ls_powl_actions to lt_powl_actions.
+    else.
+      ls_powl_actions-actionid      =  zcl_prf_powl_utilities=>gc_action_block.
+      ls_powl_actions-cardinality   = 'I'.
+      ls_powl_actions-placement     = 'B'.
+      ls_powl_actions-enabled       = abap_false.
+*      ls_powl_actions-imagesource   = '~Icon/Locked'.
+      ls_powl_actions-placementindx = 9.
+      ls_powl_actions-tooltip = text-026.
+      ls_powl_actions-text = text-026.
+      append ls_powl_actions to lt_powl_actions.
+    endif.
+
+    read table c_action_defs into ls_powl_actions
+                     with table key actionid = zcl_prf_powl_utilities=>gc_action_regen_xml.
+    if sy-subrc = 0.
+      append ls_powl_actions to lt_powl_actions.
+    else.
+      ls_powl_actions-actionid      = zcl_prf_powl_utilities=>gc_action_regen_xml.
+      ls_powl_actions-cardinality   = 'I'.
+      ls_powl_actions-placement     = 'B'.
+      ls_powl_actions-enabled       = abap_false.
+      ls_powl_actions-imagesource   = ''.
+      ls_powl_actions-placementindx = 8.
+      ls_powl_actions-tooltip = text-022.
+      ls_powl_actions-text = text-022.
+      append ls_powl_actions to lt_powl_actions.
+    endif.
+
+  endif.
+*
+**   READ TABLE c_action_defs INTO ls_powl_actions
+**                 WITH TABLE KEY actionid = zcl_prf_powl_utilities=>gc_action_prf_id.
+**    IF sy-subrc  = 0.
+**      APPEND ls_powl_actions TO lt_powl_actions.
+**    ELSE.
+**      ls_powl_actions-actionid      = zcl_prf_powl_utilities=>gc_action_prf_id.
+**      ls_powl_actions-cardinality   = 'I'.
+**      ls_powl_actions-placement     = 'B'.
+**      ls_powl_actions-enabled       = abap_false.
+**      ls_powl_actions-imagesource   = '~Icon/Display'.
+**      ls_powl_actions-placementindx = 9.
+**      ls_powl_actions-tooltip = text-025.
+**      ls_powl_actions-text = text-025.
+**      APPEND ls_powl_actions TO lt_powl_actions.
+**    ENDIF.
+*
+
+  e_actions_changed =   'X'.
+  c_action_defs = lt_powl_actions.
+
+  try.
+      get badi lr_badi_ref.
+      call badi lr_badi_ref->modify_powl_actions
+        exporting
+          i_username        = i_username
+          i_applid          = i_applid
+          i_type            = i_type
+          i_langu           = i_langu
+          i_selcrit_para    = i_selcrit_para
+        importing          " If Customer has changed the actions table and indicated the change with changed parameter pass on value preserved for action change flag.
+          e_actions_changed = e_actions_changed
+        changing
+          c_action_defs     = c_action_defs.
+
+    catch cx_badi_context_error
+             cx_badi_filter_error
+             cx_badi_initial_context
+             cx_badi_multiply_implemented
+             cx_badi_not_single_use
+             cx_badi_unknown_error .                    "#EC NO_HANDLER
+  endtry.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER~GET_ACTION_CONF
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_ACTIONID                     TYPE        POWL_ACTIONID_TY
+* | [--->] I_RESULT_TAB                   TYPE        INDEX TABLE
+* | [--->] I_SELECTED                     TYPE        RSTABIXTAB
+* | [--->] I_CHANGED                      TYPE        POWL_CHANGEINFO_TTY
+* | [--->] I_ACTION_INDEX                 LIKE        SY-TABIX
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [<---] E_CONF_MESSAGE                 TYPE        STRING_TABLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder~get_action_conf.
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER~GET_DETAIL_COMP
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [<---] E_DETAIL_COMP                  TYPE        STRING
+* | [<---] E_DETAIL_TYPE                  TYPE        POWL_TYPE_TY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder~get_detail_comp.
+
+** Load definitions
+*  _create_powldef( i_type ).
+*
+*  e_detail_comp = gs_powlhdr-detail_wd_comp.
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER~GET_FIELD_CATALOG
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_SELCRIT_VALUES               TYPE        RSPARAMS_TT
+* | [<---] E_FIELDCAT_CHANGED             TYPE        POWL_XFLAG_TY
+* | [<---] E_VISIBLE_COLS_COUNT           TYPE        I
+* | [<---] E_VISIBLE_ROWS_COUNT           TYPE        I
+* | [<---] E_DEFAULT_TECHNICAL_COL        TYPE        POWL_XFLAG_TY
+* | [<-->] C_FIELDCAT                     TYPE        POWL_FIELDCAT_TTY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder~get_field_catalog.
+  " field catalog to be used for query results table
+  "type POWL_FIELDCAT_STY
+  data: lr_exit_ref      type ref to prf_dash_board_modifications,
+        lt_field_catalog type powl_fieldcat_tty.
+  data: lt_listvals type powl_namevalue_tty,
+        ls_listval  type powl_namevalue_sty,
+        ls_fieldcat type powl_fieldcat_sty.
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+  data: ls_visible_query          type powl_query_sty.
+*
+  field-symbols <ls_fieldcat> type powl_fieldcat_sty.
+
+  " Get Current Query
+  call method cl_powl_runtime_services=>get_current_query
+    receiving
+      rs_query = ls_visible_query.
+
+  build_fieldcat( iv_type = i_type iv_query = ls_visible_query-masterquery ).
+  c_fieldcat = at_field_catalog.
+  e_visible_cols_count = '10'.
+  e_visible_rows_count = '20'.
+
+
+  try.
+      get badi lr_badi_ref.
+      call badi lr_badi_ref->modify_fields_catalog
+        exporting
+          i_username              = i_username
+          i_applid                = i_applid
+          i_type                  = i_type
+          i_langu                 = i_langu
+          i_selcrit_values        = i_selcrit_values
+        importing
+          e_fieldcat_changed      = e_fieldcat_changed
+          e_visible_cols_count    = e_visible_cols_count
+          e_visible_rows_count    = e_visible_rows_count
+          e_default_technical_col = e_default_technical_col
+        changing
+          c_fieldcat              = c_fieldcat.
+    catch cx_badi_context_error
+          cx_badi_filter_error
+          cx_badi_initial_context
+          cx_badi_multiply_implemented
+          cx_badi_not_single_use
+          cx_badi_unknown_error .                       "#EC NO_HANDLER
+  endtry.
+*
+  e_fieldcat_changed = abap_true.
+  at_field_catalog = c_fieldcat.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER~GET_OBJECTS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_SELCRIT_VALUES               TYPE        RSPARAMS_TT
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_VISIBLE_FIELDS               TYPE        POWL_VISIBLE_COLS_TTY(optional)
+* | [<---] E_RESULTS                      TYPE        INDEX TABLE
+* | [<---] E_MESSAGES                     TYPE        POWL_MSG_TTY
+* | [<---] E_WORKFLOW_RESULT_COUNT        TYPE        POWL_COUNT_TY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder~get_objects.
+
+  data: lt_where                  type table of string,
+        lr_model                  type ref to cl_powl_model,
+        lr_powl_helper            type ref to cl_powl_ui_helper,
+        lr_comp                   type ref to if_wd_component,
+        ls_criteria               type rsparams,
+        lv_exec_custom_query_only type xfeld,
+        lt_selcrit_values         type rsparams_tt,
+        lv_user                   type string,
+        lv_where                  type string,
+        ls_visible_query          type powl_query_sty,
+        lv_value                  type string,
+        lv_created_date           type aedat,
+        lv_doc_no                 type prf_regm_doc_no,
+        lv_created_by             type prf_createdby,
+        lv_result                 type sysubrc,
+        lv_date_to                type sy-datum,
+        lv_num_days               type int4,
+        ls_msg                    type powl_msg_sty,
+        lv_sdate                  type sy-datum,
+        lv_edate                  type sy-datum,
+        lv_stime                  type sy-uzeit,
+        lv_etime                  type sy-uzeit,
+        lv_timestamp1             type timestamp,
+        lv_timestamp2             type timestamp,
+        ls_publ                   type prf_c_publ_hist,
+        lt_payloadid              type standard table of prf_c_publ_hist-payload_id,
+        lv_payloadid              type prf_c_publ_hist-payload_id.
+*
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+*
+  field-symbols : <lt_any> type any table,
+                  <ls_any> type any,
+                  <lv_fld> type any.
+
+  " Indicate there is no custom Implementation, execute default Query
+  lv_exec_custom_query_only = abap_false.
+
+  "Get the resultset ..
+  assign mt_result to <lt_any>.
+
+  " Get Current Query
+  call method cl_powl_runtime_services=>get_current_query
+    receiving
+      rs_query = ls_visible_query.
+
+  data: ls_selcrit type rsparams,
+        ls_range   type mmpurui_range_sty.
+
+  data: mt_range_prf_stat              type mmpurui_range_tty.
+  data: mt_range_prf_approval_status   type mmpurui_range_tty.
+  data: mt_range_prf_ctr_st_date       type mmpurui_range_tty.
+  data: mt_range_amnd_st_date          type mmpurui_range_tty.
+  data: mt_range_compcode              type mmpurui_range_tty.
+  data: mt_range_pogroup               type mmpurui_range_tty.
+  data: mt_range_created_by            type mmpurui_range_tty.
+  data: mt_range_blk_rsn               type mmpurui_range_tty.
+  data: mt_range_src_doc_type          type mmpurui_range_tty.
+
+  data: lv_incomplete_flag            type boolean.
+  data: lv_tz type tznzone.
+  data: lv_temp_date type datum.
+
+  clear lv_incomplete_flag.
+
+  loop at i_selcrit_values into ls_selcrit.
+    clear ls_range.
+    move-corresponding ls_selcrit to ls_range.
+    case ls_selcrit-selname.
+*       handle predefined selection criteria
+      when 'PRF_STAT'.
+        append ls_range to mt_range_prf_stat.
+      when 'PRF_APPR'.
+        append ls_range to  mt_range_prf_approval_status.
+      when 'PRF_SDTE'.
+        append ls_range to mt_range_prf_ctr_st_date.
+      when 'AMND_DTE'.
+        append ls_range to mt_range_amnd_st_date.
+      when 'COMPCODE'.
+        append ls_range to mt_range_compcode.
+      when 'POGROUP'.
+        append ls_range to mt_range_pogroup.
+      when 'USERONLY'.
+        if  ls_selcrit-low = abap_true.
+          ls_range-low = sy-uname.
+          append ls_range to mt_range_created_by.
+        endif.
+      when 'INCOMPL'.
+        if  ls_selcrit-low = abap_true.
+          lv_incomplete_flag = abap_true.
+        else.
+          lv_incomplete_flag = abap_false.
+        endif.
+      when 'CREATED'.
+        append ls_range to mt_range_created_by.
+      when 'BLK_RSN'.
+        append ls_range to mt_range_blk_rsn.
+      when 'DOC_TYP'.
+        append ls_range to mt_range_src_doc_type.
+      when others.
+    endcase.
+  endloop.
+
+  select * from   prf_c_header as a inner join prf_c_item as b
+                               on a~header_key = b~header_key
+                               into corresponding fields of table mt_result ##too_many_itab_fields
+                                     where a~status              in mt_range_prf_stat and
+                                           a~approval_status     in mt_range_prf_approval_status and
+                                           a~compcode            in mt_range_compcode and
+                                           a~created_by          in mt_range_created_by and
+                                           a~src_doc_typ         in mt_range_src_doc_type and
+                                           b~po_grp              in mt_range_pogroup   and
+                                           b~prf_ctr_start_dt    in mt_range_prf_ctr_st_date and
+                                           b~amend_startdt       in mt_range_amnd_st_date and
+                                           b~pub_blk_reason      in mt_range_blk_rsn and
+                                           a~del_ind             ne abap_true.
+
+  lt_selcrit_values = i_selcrit_values.
+  sort lt_selcrit_values by selname.
+
+  sort mt_result descending.
+  field-symbols: <ls_result> type zprf_powl_data.
+  " Assigning PO created by, PO REQ created by, No. of days
+  loop at mt_result assigning <ls_result>.
+
+
+
+    case <ls_result>-src_doc_typ.
+      when 01 or 02.
+        "Purchase Order Created by
+        select single ernam from ekko into <ls_result>-created_by where ebeln = <ls_result>-doc_no.
+      when 06. " FI Direct Invoice
+      when others.
+    endcase.
+
+     convert time stamp <ls_result>-created_at time zone syst-zonlo into date <ls_result>-date_created time <ls_result>-time_created.
+
+*    " No. of days
+    if <ls_result>-prf_ctr_start_dt is not initial and <ls_result>-amend_startdt is initial.
+      <ls_result>-days_left =  ( ( <ls_result>-prf_ctr_start_dt + zcl_prf_powl_utilities=>gc_gazettal_deadline ) - syst-datum  ).
+    elseif  <ls_result>-amend_startdt is not initial.
+      <ls_result>-days_left =  ( ( <ls_result>-amend_startdt + zcl_prf_powl_utilities=>gc_gazettal_deadline ) - syst-datum  ).
+    elseif <ls_result>-ctr_start_dt is not initial.
+      <ls_result>-days_left =  ( ( <ls_result>-ctr_start_dt + zcl_prf_powl_utilities=>gc_gazettal_deadline ) - syst-datum  ).
+    else.
+      convert time stamp <ls_result>-created_at time zone lv_tz into date lv_temp_date.
+      <ls_result>-days_left =  ( ( lv_temp_date + zcl_prf_powl_utilities=>gc_gazettal_deadline ) - syst-datum  ).
+    endif.
+*
+    if  <ls_result>-status = zcl_prf_powl_utilities=>gc_status_publish.
+      select payload_id pub_tmstmp created_by from prf_c_publ_hist
+                           into corresponding fields of <ls_result>
+                            where header_key eq <ls_result>-header_key
+                            and   vers_no    eq <ls_result>-vers_no
+                            order by pub_tmstmp ascending.
+      endselect.
+      append <ls_result> to e_results.
+    else.
+      if <ls_result>-latest_vers eq 0.
+        if <ls_result>-status  =  zcl_prf_powl_utilities=>gc_status_unapp_complete and lv_incomplete_flag = abap_true.
+          continue.
+        endif.
+      else.
+        if lv_incomplete_flag = abap_true.
+          if ( <ls_result>-status  =  zcl_prf_powl_utilities=>gc_status_unapp_complete or <ls_result>-status  =  zcl_prf_powl_utilities=>gc_status_reviewa )
+              and <ls_result>-amend_startdt is initial.
+*          all ok
+          else.
+            continue.
+          endif.
+        endif.
+      endif.
+
+
+      if <ls_result>-vers_no ne <ls_result>-latest_vers.
+        continue.
+      else.
+        append <ls_result> to e_results.
+      endif.
+    endif.
+
+  endloop.
+
+  " Call badi Impl let Customer to modify recordset for display
+
+  try.
+      get badi lr_badi_ref.
+      call badi lr_badi_ref->modify_resultset
+        exporting
+          iv_username              = i_username
+          iv_applid                = i_applid
+          iv_type                  = i_type
+          it_selcrit_values        = i_selcrit_values
+          iv_langu                 = i_langu
+          it_visible_fields        = i_visible_fields
+        changing
+          ct_messages              = e_messages
+          cv_workflow_result_count = e_workflow_result_count
+          ct_results               = e_results.
+    catch cx_sy_move_cast_error
+     cx_badi_context_error
+     cx_badi_filter_error
+     cx_badi_initial_context
+     cx_badi_multiply_implemented
+     cx_badi_not_single_use
+     cx_badi_unknown_error
+     cx_root.                                           "#EC NO_HANDLER
+  endtry.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER~GET_OBJECT_DEFINITION
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_SELCRIT_VALUES               TYPE        RSPARAMS_TT(optional)
+* | [<---] E_OBJECT_DEF                   TYPE REF TO CL_ABAP_TABLEDESCR
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder~get_object_definition.
+    e_object_def ?= cl_abap_tabledescr=>describe_by_data( mt_result ).
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER~GET_SEL_CRITERIA
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [<---] E_SELCRIT_DEFS_CHANGED         TYPE        POWL_XFLAG_TY
+* | [<---] E_DEFAULT_VAL_CHANGED          TYPE        POWL_XFLAG_TY
+* | [<-->] C_SELCRIT_DEFS                 TYPE        POWL_SELCRIT_TTY
+* | [<-->] C_DEFAULT_VALUES               TYPE        RSPARAMS_TT
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder~get_sel_criteria.
+  data: ls_sel_criteria  type powl_selcrit_sty.
+  data: ls_visible_query type powl_query_sty.
+  data: ls_selopt_incl   type rsoptions.
+*
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+*
+  " selection criteria is being set . updating the structure and appending it to a table.
+  clear: c_selcrit_defs, at_selcrit_val.
+
+  call method cl_powl_runtime_services=>get_current_query
+    receiving
+      rs_query = ls_visible_query.
+
+  ls_sel_criteria-kind = 'S'. " Select Option
+  ls_sel_criteria-param_type = 'I'. " Input field
+  ls_sel_criteria-selopt_type = 'M'. " Select-option without interval (only display relevant)
+  ls_sel_criteria-allow_admin_change = abap_true.
+  ls_sel_criteria-mandatory = abap_false.
+  ls_sel_criteria-read_only = abap_false.
+  ls_sel_criteria-hidden = abap_false.
+  ls_sel_criteria-quicksearch_crit = abap_true.
+  ls_sel_criteria-ovs_handler_name = abap_false.
+  ls_sel_criteria-ddic_shlp = abap_false.
+  ls_sel_criteria-decimals = abap_false.
+  ls_sel_criteria-outputlen = abap_false.
+  ls_selopt_incl-eq = abap_true.
+  ls_sel_criteria-selopt_options_include = ls_selopt_incl.
+  ls_selopt_incl-bt = abap_true.
+  ls_selopt_incl-cp = abap_false.
+  ls_selopt_incl-ge = abap_false.
+  ls_selopt_incl-gt = abap_false.
+  ls_selopt_incl-le = abap_false.
+  ls_selopt_incl-lt = abap_false.
+  ls_selopt_incl-nb = abap_false.
+  ls_selopt_incl-ne = abap_false.
+  ls_selopt_incl-np = abap_false.
+  ls_sel_criteria-selopt_options_exclude = ls_selopt_incl.
+  ls_sel_criteria-format_properties = abap_false.
+*
+  ls_sel_criteria-selname = 'PRF_STATUS'.
+  ls_sel_criteria-datatype = 'PRF_STATUS'.
+  ls_sel_criteria-ref_table = 'PRF_C_HEADER'.
+  ls_sel_criteria-ref_field = 'STATUS'.
+  ls_sel_criteria-crittext         = text-991.
+  ls_sel_criteria-tooltip          = text-991.
+  ls_sel_criteria-header           = text-991.
+  ls_sel_criteria-hidden           = abap_true.
+  ls_sel_criteria-quicksearch_crit = abap_false.
+  append ls_sel_criteria to c_selcrit_defs.
+
+  ls_sel_criteria-selname = 'PRF_APPR'.
+  ls_sel_criteria-datatype = 'PRF_APPRV_STATUS'.
+  ls_sel_criteria-ref_table = 'PRF_C_HEADER'.
+  ls_sel_criteria-ref_field = 'APPROVAL_STATUS'.
+  ls_sel_criteria-crittext = text-990.
+  ls_sel_criteria-tooltip = text-990.
+  ls_sel_criteria-header = text-990.
+  append ls_sel_criteria to c_selcrit_defs.
+
+  ls_sel_criteria-selname   = 'PRF_SDTE'.
+  ls_sel_criteria-datatype  = 'PRF_CTR_ST_DATE'.
+  ls_sel_criteria-ref_table = 'PRF_C_ITEM'.
+  ls_sel_criteria-ref_field = 'PRF_CTR_START_DT'.
+  ls_sel_criteria-crittext  = 'PRF start date'.
+  ls_sel_criteria-tooltip   = 'PRF start date'..
+  append ls_sel_criteria to c_selcrit_defs.
+
+  ls_sel_criteria-selname   = 'AMN_DATE'.
+  ls_sel_criteria-datatype  = 'PRF_AMENDT_STRT_DT'.
+  ls_sel_criteria-ref_table = 'PRF_C_ITEM'.
+  ls_sel_criteria-ref_field = 'AMEND_STARTDT'.
+  ls_sel_criteria-crittext  = 'Amnenment Start Date'.
+  ls_sel_criteria-tooltip   = 'Amnenment Start Date'.
+  append ls_sel_criteria to c_selcrit_defs.
+*
+  ls_sel_criteria-selname = 'COMPCODE'.
+  ls_sel_criteria-datatype = 'PRF_COMP_CODE'.
+  ls_sel_criteria-ref_table = 'PRF_C_HEADER'.
+  ls_sel_criteria-ref_field = 'COMPCODE'.
+  ls_sel_criteria-crittext = 'Company Code'.
+  ls_sel_criteria-tooltip = 'Company Code'.
+  append ls_sel_criteria to c_selcrit_defs.
+*
+  ls_sel_criteria-selname = 'POGROUP'.
+  ls_sel_criteria-datatype = 'PRF_EKGRP'.
+  ls_sel_criteria-ref_table = 'PRF_C_ITEM'.
+  ls_sel_criteria-ref_field = 'PO_GRP'.
+  ls_sel_criteria-crittext = 'Purch. Group'.
+  ls_sel_criteria-tooltip = 'Purch. Group'.
+  append ls_sel_criteria to c_selcrit_defs.
+*
+  ls_sel_criteria-selname = 'CREATED'.
+  ls_sel_criteria-datatype = 'PRF_CREATEDBY'.
+  ls_sel_criteria-ref_table = 'PRF_C_HEADER'.
+  ls_sel_criteria-ref_field = 'CREATED_BY'.
+  ls_sel_criteria-crittext = 'Created By'.
+  ls_sel_criteria-tooltip = 'Created By'.
+  append ls_sel_criteria to c_selcrit_defs.
+*
+**  ls_sel_criteria-selname = 'CRT_DATE'.
+**  ls_sel_criteria-datatype = 'DATUM'.
+**  ls_sel_criteria-ref_table = 'SYST'.
+**  ls_sel_criteria-ref_field = 'DATUM'.
+**  ls_sel_criteria-crittext = 'Creation Date'.
+**  ls_sel_criteria-tooltip = 'Creation Date'.
+**  ls_sel_criteria-selopt_type = 'A'.
+**  append ls_sel_criteria to c_selcrit_defs.
+*
+  ls_sel_criteria-selname     = 'DOC_TYP'.
+  ls_sel_criteria-datatype    = 'PRF_REGM_DOC_TYPE'.
+  ls_sel_criteria-ref_table   = 'PRF_C_HEADER'.
+  ls_sel_criteria-ref_field   = 'SRC_DOC_TYP'.
+  ls_sel_criteria-crittext    = 'Source Doc Type'.
+  ls_sel_criteria-tooltip     = 'Source Doc Type'.
+  ls_sel_criteria-selopt_type = 'M'.
+  append ls_sel_criteria to c_selcrit_defs.
+*
+  ls_sel_criteria-selname = 'BLK_RSN'.
+  ls_sel_criteria-datatype = 'PRF_PUB_BLK_REASON'.
+  ls_sel_criteria-ref_table = 'PRF_C_ITEM'.
+  ls_sel_criteria-ref_field = 'PUB_BLK_REASON'.
+  ls_sel_criteria-crittext = 'Blocking Reason'.
+  ls_sel_criteria-tooltip = 'Blocking Reason'.
+  ls_sel_criteria-selopt_type = 'M'.
+  append ls_sel_criteria to c_selcrit_defs.
+*
+   ls_sel_criteria-selname = 'INCOMPL'.
+  ls_sel_criteria-datatype = 'WDY_BOOLEAN'.
+  clear ls_sel_criteria-ref_table.
+  clear ls_sel_criteria-ref_field.
+  ls_sel_criteria-crittext = 'Incomplete'.
+  ls_sel_criteria-tooltip = 'Incomplete'.
+  ls_sel_criteria-kind = 'P'. " Select Option
+  ls_sel_criteria-param_type = 'C'. " Input field
+  ls_sel_criteria-quicksearch_crit = abap_false.
+  append ls_sel_criteria to c_selcrit_defs.
+*
+  ls_sel_criteria-selname = 'USERONLY'.
+  ls_sel_criteria-datatype = 'WDY_BOOLEAN'.
+  clear ls_sel_criteria-ref_table.
+  clear ls_sel_criteria-ref_field.
+  ls_sel_criteria-crittext = 'User Only'.
+  ls_sel_criteria-tooltip = 'User Only'.
+  ls_sel_criteria-kind = 'P'. " Select Option
+  ls_sel_criteria-param_type = 'C'. " Input field
+  ls_sel_criteria-quicksearch_crit = abap_false.
+  append ls_sel_criteria to c_selcrit_defs.
+*
+  e_selcrit_defs_changed = abap_true.
+  at_selcrit_val = c_selcrit_defs.
+
+  try.
+      get badi lr_badi_ref.
+      call badi lr_badi_ref->set_selection_criteria
+        exporting
+          i_username             = i_username    " User name
+          i_applid               = i_applid      " Application ID
+          i_type                 = i_type        " POWL Type ID
+          i_langu                = i_langu       " Language Key
+        importing
+          e_selcrit_defs_changed = e_selcrit_defs_changed   " X-Flag
+          e_default_val_changed  = e_default_val_changed   " X-Flag
+        changing
+          c_selcrit_defs         = c_selcrit_defs   " Selection criteria meta description
+          c_default_values       = c_default_values.   " rsparams Table
+    catch cx_badi_context_error
+          cx_badi_filter_error
+          cx_badi_initial_context
+          cx_badi_multiply_implemented
+          cx_badi_not_single_use
+          cx_badi_unknown_error .                       "#EC NO_HANDLER
+  endtry.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_PRF_POWL_FEEDER->IF_POWL_FEEDER~HANDLE_ACTION
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY
+* | [--->] I_ACTIONID                     TYPE        POWL_ACTIONID_TY
+* | [--->] I_CHANGED                      TYPE        POWL_CHANGEINFO_TTY
+* | [--->] I_ACTION_INDEX                 LIKE        SY-TABIX
+* | [--->] I_ACTION_CONF                  TYPE        POWL_ACTION_CONF_TY
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_ADDITIONAL_DATA              TYPE        DATA(optional)
+* | [--->] I_VISIBLE_FIELDS               TYPE        POWL_VISIBLE_COLS_TTY(optional)
+* | [<---] E_PORTAL_ACTIONS               TYPE        POWL_FOLLOW_UP_STY
+* | [<---] E_MESSAGES                     TYPE        POWL_MSG_TTY
+* | [<---] E_DO_REFRESH                   TYPE        POWL_XFLAG_TY
+* | [<---] E_RESULT_LINES_CHANGED         TYPE        POWL_XFLAG_TY
+* | [<---] E_CHANGES_PROCESSED            TYPE        POWL_XFLAG_TY
+* | [<---] E_SELECTED_CHANGED             TYPE        POWL_XFLAG_TY
+* | [<---] E_ACTIONS_CHANGED              TYPE        POWL_XFLAG_TY
+* | [<-->] C_SELECTED                     TYPE        RSTABIXTAB
+* | [<-->] C_RESULT_TAB                   TYPE        INDEX TABLE
+* | [<-->] C_WORKFLOW_RESULT_COUNT        TYPE        POWL_COUNT_TY(optional)
+* | [<-->] C_ACTION_DEFS                  TYPE        POWL_ACTDESCR_TTY
+* | [<-->] C_FIRST_VISIBLE_ROW            TYPE        SY-TABIX
+* | [<-->] C_FIRST_VISIBLE_SCROLL_COL     TYPE        STRING(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method if_powl_feeder~handle_action.
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+  data: ls_prf_chng_trig type prf_chng_trig,
+        lruid_ex         type ref to cx_uuid_error.
+** Standard Action Handling
+
+  types: begin of lty_s_headers,
+           header_key     type prf_s_header-header_key,
+           vers_no        type prf_s_item-vers_no,
+           status         type prf_s_header-status,
+           amend_startdt  type prf_amendt_strt_dt,
+           amend_reasn    type prf_amendmt_rsn_txt,
+         end of lty_s_headers,
+         lty_t_headers type standard table of lty_s_headers.
+  types: begin of lty_s_publish,
+           header_key type prf_s_header-header_key,
+           prf_id     type prf_s_header-prf_id,
+           vers_no    type prf_s_item-vers_no,
+           payload_id type prf_c_publ_hist-payload_id,
+         end of  lty_s_publish,
+         lty_t_publish type standard table of lty_s_publish.
+
+  data: lr_appl_log        type ref to prf_cl_appl_log,
+        lt_headers         type lty_t_headers,
+        ls_headers         type lty_s_headers,
+        lt_published_det   type standard table of prf_c_publ_hist,
+        lt_headers_det     type standard table of prf_c_header,
+        lt_items_det       type standard table of prf_c_item,
+        lt_headers_final   type standard table of prf_c_header,
+        lt_items_final     type standard table of prf_c_item,
+        lt_return          type bapiret2_t,
+        lt_return_log      type bapiret2_t,
+        ls_msg             type powl_msg_sty,
+        ls_published_det   type prf_c_publ_hist,
+        ls_return          type bapiret2,
+        lv_payid           type string,
+        lv_timetmp         type string,
+        lv_timestamp       type timestamp,
+        lv_cust_impl_class type prf_hlpr_impl_classname,
+        lv_lock_success    type xfeld,
+        lv_calling_source  type prf_call_source,
+        lv_badi            type ref to prf_powl_publish_action,
+        lt_payloadid       type standard table of prf_c_publ_hist-payload_id,
+        lv_payloadid       type prf_c_publ_hist-payload_id,
+        ls_publish         type lty_s_publish,
+        lt_publish         type lty_t_publish,
+        lt_pub_hist_rec    type lty_t_publish,
+        ls_header_repub    type prf_c_header,
+        ls_item_repub      type prf_c_item,
+        lt_header_repub    type standard table of prf_c_header,
+        lt_item_repub      type standard table of prf_c_item,
+        lv_timestmp        type string,
+        lt_prf_publ_hist   type standard table of prf_c_publ_hist,
+        lv_indx            type sytabix,
+        ls_prf_publ_hist   type prf_c_publ_hist,
+        lv_payload_id      type string.
+
+  data: lv_test_run  type abap_bool.
+
+  data: ls_message_string  type string.
+
+  field-symbols: <ls_any>        type any,
+                 <lv_any_field>  type any,
+                 <ls_selected>   type rstabix,
+                 <ls_header_det> type prf_c_header,
+                 <ls_publish>    type lty_s_publish,
+                 <ls_pub_hdr>    type prf_c_publ_hist,
+                 <ls_item_det>   type prf_c_item.
+
+  field-symbols: <ls_read>      type any.
+  field-symbols:<ls_powl_action> type powl_actdescr_sty.
+*
+  create object lr_appl_log
+    exporting
+      iv_category    = ac_log_object
+      iv_subcategory = ac_log_sub_object.
+  if lr_appl_log is not bound.
+    ls_msg-msgid = ac_msg_id.
+    ls_msg-msgtype = ac_error_msg.
+    ls_msg-msgnumber = '019'.
+    append ls_msg to e_messages.
+    if 1 = 2.
+      message e019(prf_cntrl_msg).
+    endif.
+    return.
+  endif.
+  clear: lt_headers, ls_headers.
+  loop at c_selected assigning <ls_selected>.
+    data: lv_selected_line_index type sy-tabix.
+    lv_selected_line_index  =  sy-tabix.
+    read table c_result_tab assigning <ls_read>
+                index <ls_selected>-tabix.
+    check sy-subrc eq 0.
+    assign component 'HEADER_KEY' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-header_key = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    assign component 'LATEST_VERS' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-vers_no = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    assign component 'STATUS' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-status = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    assign component 'AMEND_STARTDT' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-amend_startdt = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    assign component 'AMEND_REASN' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-amend_reasn = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    if lv_selected_line_index = 1.
+      data: lv_first_status type prf_s_header-status.
+      lv_first_status = ls_headers-status.
+      append ls_headers to lt_headers.
+    else.
+      if ls_headers-status ne lv_first_status.
+        delete c_selected index lv_selected_line_index.
+      else.
+        append ls_headers to lt_headers.
+      endif.
+    endif.
+  endloop.
+
+
+  case i_actionid.
+*
+    when 'POWL_LEAD_SEL'.
+      field-symbols: <ls_powl_inactivate> type powl_actdescr_sty.
+      loop at c_action_defs assigning <ls_powl_inactivate>.
+        <ls_powl_inactivate>-enabled       = abap_false.
+      endloop.
+*   activate appropriate action for record status
+      if lines( lt_headers ) eq 1.
+        field-symbols: <single_line> type lty_s_headers.
+        read table lt_headers index 1 assigning <single_line>.
+
+        case <single_line>-status.
+          when zcl_prf_powl_utilities=>gc_status_publish.
+            read table c_action_defs assigning <ls_powl_action>
+                         with table key actionid = zcl_prf_powl_utilities=>gc_action_regen_xml.
+            <ls_powl_action>-enabled       = abap_true.
+            e_actions_changed = abap_true.
+          when others.
+        endcase.
+      endif.
+      field-symbols: <header_line> type lty_s_headers.
+      loop at lt_headers assigning <header_line>.
+        case <header_line>-status.
+          when zcl_prf_powl_utilities=>gc_status_ready.
+            read table c_action_defs assigning <ls_powl_action>
+                              with table key actionid = zcl_prf_powl_utilities=>gc_action_publish.
+
+            <ls_powl_action>-enabled       = abap_true.
+            e_actions_changed = abap_true.
+            read table c_action_defs assigning <ls_powl_action>
+                              with table key actionid = zcl_prf_powl_utilities=>gc_action_test_xml.
+
+            <ls_powl_action>-enabled       = abap_true.
+            e_actions_changed = abap_true.
+          when zcl_prf_powl_utilities=>gc_status_readya.
+            check <header_line>-amend_reasn is not initial
+              and <header_line>-amend_startdt is not initial.
+            read table c_action_defs assigning <ls_powl_action>
+                              with table key actionid = zcl_prf_powl_utilities=>gc_action_publish.
+
+            <ls_powl_action>-enabled       = abap_true.
+            e_actions_changed = abap_true.
+            read table c_action_defs assigning <ls_powl_action>
+                              with table key actionid = zcl_prf_powl_utilities=>gc_action_test_xml.
+            <ls_powl_action>-enabled       = abap_true.
+            e_actions_changed = abap_true.
+
+            read table c_action_defs assigning <ls_powl_action>
+                                          with table key actionid = zcl_prf_powl_utilities=>gc_action_reject.
+
+            <ls_powl_action>-enabled       = abap_true.
+            e_actions_changed = abap_true.
+
+
+          when zcl_prf_powl_utilities=>gc_status_review or zcl_prf_powl_utilities=>gc_status_reviewa.
+            if  ls_headers-vers_no is initial.
+              read table c_action_defs assigning <ls_powl_action>
+                              with table key actionid = zcl_prf_powl_utilities=>gc_action_ready.
+              <ls_powl_action>-enabled       = abap_true.
+              e_actions_changed = abap_true.
+
+              read table c_action_defs assigning <ls_powl_action>
+                                         with table key actionid = zcl_prf_powl_utilities=>gc_action_reject.
+
+              <ls_powl_action>-enabled       = abap_true.
+              e_actions_changed = abap_true.
+            elseif <header_line>-amend_reasn is not initial
+               and <header_line>-amend_startdt is not initial.
+              read table c_action_defs assigning <ls_powl_action>
+                            with table key actionid = zcl_prf_powl_utilities=>gc_action_ready.
+              <ls_powl_action>-enabled       = abap_true.
+              e_actions_changed = abap_true.
+              read table c_action_defs assigning <ls_powl_action>
+                                         with table key actionid = zcl_prf_powl_utilities=>gc_action_reject.
+
+              <ls_powl_action>-enabled       = abap_true.
+              e_actions_changed = abap_true.
+            endif.
+          when zcl_prf_powl_utilities=>gc_status_edit.
+            read table c_action_defs assigning <ls_powl_action>
+                              with table key actionid = zcl_prf_powl_utilities=>gc_action_ready.
+            <ls_powl_action>-enabled       = abap_true.
+            e_actions_changed = abap_true.
+
+          when zcl_prf_powl_utilities=>gc_status_publish.
+            read table c_action_defs assigning <ls_powl_action>
+                               with table key actionid = zcl_prf_powl_utilities=>gc_action_regen_xml.
+            <ls_powl_action>-enabled       = abap_true.
+            read table c_action_defs assigning <ls_powl_action>
+                               with table key actionid = zcl_prf_powl_utilities=>gc_action_test_xml.
+            <ls_powl_action>-enabled       = abap_true.
+            e_actions_changed = abap_true.
+
+          when zcl_prf_powl_utilities=>gc_status_blockeda.
+            read table c_action_defs assigning <ls_powl_action>
+                               with table key actionid = zcl_prf_powl_utilities=>gc_action_block.
+            <ls_powl_action>-enabled       = abap_true.
+            e_actions_changed = abap_true.
+          when others.
+            loop at c_action_defs assigning <ls_powl_inactivate>.
+              <ls_powl_inactivate>-enabled       = abap_false.
+            endloop.
+            e_actions_changed = abap_true.
+        endcase.
+      endloop.
+
+    when zcl_prf_powl_utilities=>gc_action_publish or zcl_prf_powl_utilities=>gc_action_test_xml.
+      check i_action_conf = 'Y'.
+
+      me->publish_xml(
+         exporting
+          i_username                 = i_username
+          i_applid                   = i_applid
+          i_type                     = i_type
+          i_actionid                 = i_actionid
+          i_changed                  = i_changed
+          i_action_index             = i_action_index
+          i_action_conf              = i_action_conf
+          i_langu                    = sy-langu
+          i_additional_data          = i_additional_data
+          i_visible_fields           = i_visible_fields
+        importing
+          e_portal_actions           = e_portal_actions
+          e_messages                 = e_messages
+          e_do_refresh               = e_do_refresh
+          e_result_lines_changed     = e_result_lines_changed
+          e_changes_processed        = e_changes_processed
+          e_selected_changed         = e_selected_changed
+          e_actions_changed          = e_actions_changed
+        changing
+          c_selected                 = c_selected
+          c_result_tab               = c_result_tab
+          c_action_defs              = c_action_defs ).
+
+    when zcl_prf_powl_utilities=>gc_action_reject." when the action is reject
+*      CHECK i_action_conf = 'Y'.
+
+      me->reject(
+      exporting
+         i_username                 = i_username
+         i_applid                   = i_applid
+         i_type                     = i_type
+         i_actionid                 = i_actionid
+         i_changed                  = i_changed
+         i_action_index             = i_action_index
+         i_action_conf              = i_action_conf
+         i_langu                    = sy-langu
+         i_additional_data          = i_additional_data
+         i_visible_fields           = i_visible_fields
+    importing
+        e_portal_actions           = e_portal_actions
+        e_messages                 = e_messages
+        e_do_refresh               = e_do_refresh
+        e_result_lines_changed     = e_result_lines_changed
+        e_changes_processed        = e_changes_processed
+        e_selected_changed         = e_selected_changed
+        e_actions_changed          = e_actions_changed
+      changing
+         c_selected                 = c_selected
+         c_result_tab               = c_result_tab
+         c_workflow_result_count    = c_workflow_result_count
+         c_action_defs              = c_action_defs
+         c_first_visible_row        = c_first_visible_row
+         c_first_visible_scroll_col = c_first_visible_scroll_col
+       ).
+
+    when zcl_prf_powl_utilities=>gc_action_prf_id.
+      me->display_prf(
+        exporting
+          i_username                 = i_username
+          i_applid                   = i_applid
+          i_type                     = i_type
+          i_actionid                 = i_actionid
+          i_changed                  = i_changed
+          i_action_index             = i_action_index
+          i_action_conf              = i_action_conf
+          i_langu                    = sy-langu
+          i_additional_data          = i_additional_data
+          i_visible_fields           = i_visible_fields
+        importing
+          e_portal_actions           = e_portal_actions
+          e_messages                 = e_messages
+          e_do_refresh               = e_do_refresh
+          e_result_lines_changed     = e_result_lines_changed
+          e_changes_processed        = e_changes_processed
+          e_selected_changed         = e_selected_changed
+          e_actions_changed          = e_actions_changed
+        changing
+          c_selected                 = c_selected
+          c_result_tab               = c_result_tab
+          c_workflow_result_count    = c_workflow_result_count
+          c_action_defs              = c_action_defs
+          c_first_visible_row        = c_first_visible_row
+          c_first_visible_scroll_col = c_first_visible_scroll_col
+             ).
+
+    when zcl_prf_powl_utilities=>gc_action_ready.
+      check i_action_conf = 'Y'.
+
+      me->ready_publish(
+        exporting
+          i_username                 = i_username
+          i_applid                   = i_applid
+          i_type                     = i_type
+          i_actionid                 = i_actionid
+          i_changed                  = i_changed
+          i_action_index             = i_action_index
+          i_action_conf              = i_action_conf
+          i_langu                    = sy-langu
+          i_additional_data          = i_additional_data
+          i_visible_fields           = i_visible_fields
+        importing
+          e_portal_actions           = e_portal_actions
+          e_messages                 = e_messages
+          e_do_refresh               = e_do_refresh
+          e_result_lines_changed     = e_result_lines_changed
+          e_changes_processed        = e_changes_processed
+          e_selected_changed         = e_selected_changed
+          e_actions_changed          = e_actions_changed
+        changing
+          c_selected                 = c_selected
+          c_result_tab               = c_result_tab
+          c_workflow_result_count    = c_workflow_result_count
+          c_action_defs              = c_action_defs
+          c_first_visible_row        = c_first_visible_row
+          c_first_visible_scroll_col = c_first_visible_scroll_col
+             ).
+
+
+    when zcl_prf_powl_utilities=>gc_action_regen_xml.
+      check i_action_conf = 'Y'.
+
+      me->regenerate_xml(
+        exporting
+          i_username                 = i_username
+          i_applid                   = i_applid
+          i_type                     = i_type
+          i_actionid                 = i_actionid
+          i_changed                  = i_changed
+          i_action_index             = i_action_index
+          i_action_conf              = i_action_conf
+
+         importing
+**           e_portal_actions           = e_portal_actions
+           e_messages                 = e_messages
+           e_do_refresh               = e_do_refresh
+*           e_result_lines_changed     = e_result_lines_changed
+*           e_changes_processed        = e_changes_processed
+           e_selected_changed         = e_selected_changed
+**          e_actions_changed          = e_actions_changed
+        changing
+          c_selected                 = c_selected
+          c_result_tab               = c_result_tab ).
+
+    when zcl_prf_powl_utilities=>gc_action_block.
+      check i_action_conf = 'Y'.
+      me->block_publish(
+        exporting
+          i_username                 = i_username
+          i_applid                   = i_applid
+          i_type                     = i_type
+          i_actionid                 = i_actionid
+          i_changed                  = i_changed
+          i_action_index             = i_action_index
+          i_action_conf              = i_action_conf
+          i_langu                    = sy-langu
+          i_additional_data          = i_additional_data
+          i_visible_fields           = i_visible_fields
+        importing
+          e_portal_actions           = e_portal_actions
+          e_messages                 = e_messages
+          e_do_refresh               = e_do_refresh
+          e_result_lines_changed     = e_result_lines_changed
+          e_changes_processed        = e_changes_processed
+          e_selected_changed         = e_selected_changed
+          e_actions_changed          = e_actions_changed
+        changing
+          c_selected                 = c_selected
+          c_result_tab               = c_result_tab
+          c_workflow_result_count    = c_workflow_result_count
+          c_action_defs              = c_action_defs
+          c_first_visible_row        = c_first_visible_row
+          c_first_visible_scroll_col = c_first_visible_scroll_col
+             ).
+
+
+    when others.
+
+  endcase.
+*        Call Customer Exit to Handle customer defined events
+  try.
+      get badi lr_badi_ref.
+      call badi lr_badi_ref->handle_custom_powl_actions
+        exporting
+          i_username                 = i_username
+          i_applid                   = i_applid
+          i_type                     = i_type
+          i_actionid                 = i_actionid
+          i_changed                  = i_changed
+          i_action_index             = i_action_index
+          i_action_conf              = i_action_conf
+          i_langu                    = i_langu
+          i_additional_data          = i_additional_data
+          i_visible_fields           = i_visible_fields
+        changing
+          c_portal_actions           = e_portal_actions
+          c_messages                 = e_messages
+          c_do_refresh               = e_do_refresh
+          c_result_lines_changed     = e_result_lines_changed
+          c_changes_processed        = e_changes_processed
+          c_selected_changed         = e_selected_changed
+          c_actions_changed          = e_actions_changed
+          c_selected                 = c_selected
+          c_result_tab               = c_result_tab
+          c_workflow_result_count    = c_workflow_result_count
+          c_action_defs              = c_action_defs
+          c_first_visible_row        = c_first_visible_row
+          c_first_visible_scroll_col = c_first_visible_scroll_col.
+
+    catch cx_badi_context_error
+              cx_badi_filter_error
+              cx_badi_initial_context
+              cx_badi_multiply_implemented
+              cx_badi_not_single_use
+              cx_badi_unknown_error .                   "#EC NO_HANDLER
+  endtry.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->LOCK_RECORD
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_HEADER_DET                  TYPE        PRF_C_HEADER
+* | [<---] EV_LOCKING_SUCEEDED            TYPE        XFELD
+* | [<---] ET_RETURN                      TYPE        BAPIRET2_T
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method lock_record.
+    data: lr_exit_ref type ref to prf_dash_board_modifications,
+          ls_return   type bapiret2.
+
+    ev_locking_suceeded = abap_true.
+
+    call function 'ENQUEUE_EPRF_LOCK'
+      exporting
+        mode_prf_c_header = 'E'
+        mandt             = sy-mandt
+        header_key        = is_header_det-header_key
+      exceptions
+        foreign_lock      = 1
+        system_failure    = 2
+        others            = 3.
+    if sy-subrc <> 0.
+* Implement suitable error handling here
+      ls_return-id = ac_msg_id.
+      ls_return-type = ac_error_msg.
+      ls_return-number = '105'.
+      ls_return-message_v1 = is_header_det-header_key.
+      ls_return-message_v2 = is_header_det-src_doc_typ.
+      ls_return-message_v3 = is_header_det-doc_no.
+      message id ls_return-id type ls_return-type number ls_return-number into ls_return-message with ls_return-message_v1 ls_return-message_v2 ls_return-message_v3.
+      append ls_return to et_return.
+      if 1 = 2." never going to happen , this is to track the message 105 from the message class PRF_CNTRL_MSG by where used list
+        message e105(prf_cntrl_msg) with ls_return-message_v1 ls_return-message_v2 ls_return-message_v3.
+      endif.
+      clear ev_locking_suceeded.
+      return.
+    endif.
+
+    case is_header_det-src_doc_typ.
+      when '01' or '02'.
+        data: lv_ebeln type ekko-ebeln.
+        lv_ebeln = is_header_det-doc_no.
+        " For Purchase Order
+        call function 'ENQUEUE_EMEKKOE'
+          exporting
+            mode_ekko      = 'E'
+            mode_ekpo      = 'E'
+            mandt          = sy-mandt
+            ebeln          = lv_ebeln
+          exceptions
+            foreign_lock   = 1
+            system_failure = 2
+            others         = 3.
+        if sy-subrc <> 0.
+          ls_return-id = ac_msg_id.
+          ls_return-type = ac_error_msg.
+          ls_return-number = '103'.
+          ls_return-message_v1 = is_header_det-src_doc_typ.
+          ls_return-message_v2 = is_header_det-doc_no.
+          ls_return-message_v3 =  is_header_det-header_key.
+          message id ls_return-id type ls_return-type number ls_return-number into ls_return-message
+                                  with ls_return-message_v1 ls_return-message_v2 ls_return-message_v3.
+          append ls_return to et_return.
+          if 1 = 2." never going to happen , this is to track the message 103 from the message class PRF_CNTRL_MSG by where used list
+            message e103(prf_cntrl_msg) with ls_return-message_v1 ls_return-message_v2 ls_return-message_v3.
+          endif.
+          clear ev_locking_suceeded.
+          return.
+        endif.
+
+      when '06'.
+        " For FI BSEG
+        data: lv_ebeln_fi type belnr_d.
+        lv_ebeln_fi = is_header_det-doc_no.
+
+        call function 'ENQUEUE_EFVIBSEG'
+          exporting
+            mode_bseg      = 'E'
+            mandt          = sy-mandt
+*           BUKRS          =
+            belnr          = lv_ebeln_fi
+          exceptions
+            foreign_lock   = 1
+            system_failure = 2
+            others         = 3.
+        if sy-subrc <> 0.
+          ls_return-id = ac_msg_id.
+          ls_return-type = ac_error_msg.
+          ls_return-number = '103'.
+          ls_return-message_v1 = is_header_det-src_doc_typ.
+          ls_return-message_v2 = is_header_det-doc_no.
+          ls_return-message_v3 =  is_header_det-header_key.
+          message id ls_return-id type ls_return-type number ls_return-number into ls_return-message
+                                  with ls_return-message_v1 ls_return-message_v2 ls_return-message_v3.
+          append ls_return to et_return.
+          if 1 = 2." never going to happen , this is to track the message 103 from the message class PRF_CNTRL_MSG by where used list
+            message e103(prf_cntrl_msg) with ls_return-message_v1 ls_return-message_v2 ls_return-message_v3.
+          endif.
+          clear ev_locking_suceeded.
+          return.
+        endif.
+
+        " For FI BKPF
+        call function 'ENQUEUE_EFBKPF'
+          exporting
+            mode_bkpf      = 'E'
+            mandt          = sy-mandt
+*           BUKRS          =
+            belnr          = lv_ebeln_fi
+          exceptions
+            foreign_lock   = 1
+            system_failure = 2
+            others         = 3.
+        if sy-subrc <> 0.
+          ls_return-id = ac_msg_id.
+          ls_return-type = ac_error_msg.
+          ls_return-number = '103'.
+          ls_return-message_v1 = is_header_det-src_doc_typ.
+          ls_return-message_v2 = is_header_det-doc_no.
+          ls_return-message_v3 =  is_header_det-header_key.
+          message id ls_return-id type ls_return-type number ls_return-number into ls_return-message
+                                  with ls_return-message_v1 ls_return-message_v2 ls_return-message_v3.
+          append ls_return to et_return.
+          if 1 = 2." never going to happen , this is to track the message 103 from the message class PRF_CNTRL_MSG by where used list
+            message e103(prf_cntrl_msg) with ls_return-message_v1 ls_return-message_v2 ls_return-message_v3.
+          endif.
+          clear ev_locking_suceeded.
+          return.
+        endif.
+      when others.
+        " Call badi Impl to modify the Field catalog to fit customer requirement.
+        try.
+            get badi lr_exit_ref.
+            call badi lr_exit_ref->set_lock_on_required_docs
+              exporting
+                is_header_det       = is_header_det    " Header table of PRF
+              importing
+                et_return           = et_return    " Return parameter table
+                ev_locking_suceeded = ev_locking_suceeded.    " Checkbox
+            .
+          catch cx_badi_context_error
+                    cx_badi_filter_error
+                    cx_badi_initial_context
+                    cx_badi_multiply_implemented
+                    cx_badi_not_single_use
+                    cx_badi_unknown_error .             "#EC NO_HANDLER
+        endtry.
+    endcase.
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->PUBLISH_XML
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER(optional)
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY(optional)
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY(optional)
+* | [--->] I_ACTIONID                     TYPE        POWL_ACTIONID_TY(optional)
+* | [--->] I_CHANGED                      TYPE        POWL_CHANGEINFO_TTY(optional)
+* | [--->] I_ACTION_INDEX                 LIKE        SY-TABIX(optional)
+* | [--->] I_ACTION_CONF                  TYPE        POWL_ACTION_CONF_TY(optional)
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_ADDITIONAL_DATA              TYPE        DATA(optional)
+* | [--->] I_VISIBLE_FIELDS               TYPE        POWL_VISIBLE_COLS_TTY(optional)
+* | [<---] E_PORTAL_ACTIONS               TYPE        POWL_FOLLOW_UP_STY
+* | [<---] E_MESSAGES                     TYPE        POWL_MSG_TTY
+* | [<---] E_DO_REFRESH                   TYPE        POWL_XFLAG_TY
+* | [<---] E_RESULT_LINES_CHANGED         TYPE        POWL_XFLAG_TY
+* | [<---] E_CHANGES_PROCESSED            TYPE        POWL_XFLAG_TY
+* | [<---] E_SELECTED_CHANGED             TYPE        POWL_XFLAG_TY
+* | [<---] E_ACTIONS_CHANGED              TYPE        POWL_XFLAG_TY
+* | [<-->] C_SELECTED                     TYPE        RSTABIXTAB(optional)
+* | [<-->] C_RESULT_TAB                   TYPE        INDEX TABLE(optional)
+* | [<-->] C_WORKFLOW_RESULT_COUNT        TYPE        POWL_COUNT_TY(optional)
+* | [<-->] C_ACTION_DEFS                  TYPE        POWL_ACTDESCR_TTY(optional)
+* | [<-->] C_FIRST_VISIBLE_ROW            TYPE        SY-TABIX(optional)
+* | [<-->] C_FIRST_VISIBLE_SCROLL_COL     TYPE        STRING(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method publish_xml.
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+  data: ls_prf_chng_trig type prf_chng_trig,
+        lruid_ex         type ref to cx_uuid_error.
+*
+  types: begin of lty_s_headers,
+           header_key type prf_s_header-header_key,
+           vers_no    type prf_s_item-vers_no,
+           status     type prf_s_header-status,
+         end of lty_s_headers,
+         lty_t_headers type standard table of lty_s_headers.
+  types: begin of lty_s_publish,
+           header_key type prf_s_header-header_key,
+           prf_id     type prf_s_header-prf_id,
+           vers_no    type prf_s_item-vers_no,
+           payload_id type prf_c_publ_hist-payload_id,
+         end of  lty_s_publish,
+         lty_t_publish type standard table of lty_s_publish.
+
+  data: lr_appl_log        type ref to prf_cl_appl_log,
+        lt_headers         type lty_t_headers,
+        ls_headers         type lty_s_headers,
+        lt_published_det   type standard table of prf_c_publ_hist,
+        lt_headers_det     type standard table of prf_c_header,
+        lt_items_det       type standard table of prf_c_item,
+        lt_headers_final   type standard table of prf_c_header,
+        lt_items_final     type standard table of prf_c_item,
+        lt_return          type bapiret2_t,
+        lt_return_log      type bapiret2_t,
+        ls_msg             type powl_msg_sty,
+        ls_published_det   type prf_c_publ_hist,
+        ls_return          type bapiret2,
+        lv_payid           type string,
+        lv_timetmp         type string,
+        lv_timestamp       type timestamp,
+        lv_cust_impl_class type prf_hlpr_impl_classname,
+        lv_lock_success    type xfeld,
+        lv_calling_source  type prf_call_source,
+        lv_badi            type ref to prf_powl_publish_action,
+        lt_payloadid       type standard table of prf_c_publ_hist-payload_id,
+        lv_payloadid       type prf_c_publ_hist-payload_id,
+        ls_publish         type lty_s_publish,
+        lt_publish         type lty_t_publish,
+        lt_pub_hist_rec    type lty_t_publish,
+        ls_header_repub    type prf_c_header,
+        ls_item_repub      type prf_c_item,
+        lt_header_repub    type standard table of prf_c_header,
+        lt_item_repub      type standard table of prf_c_item,
+        lv_timestmp        type string,
+        lt_prf_publ_hist   type standard table of prf_c_publ_hist,
+        lv_indx            type sytabix,
+        ls_prf_publ_hist   type prf_c_publ_hist,
+        lv_payload_id      type string.
+
+  data: lv_test_run  type abap_bool.
+
+  data: ls_message_string  type string.
+
+  field-symbols: <ls_any>        type any,
+                 <lv_any_field>  type any,
+                 <ls_selected>   type rstabix,
+                 <ls_header_det> type prf_c_header,
+                 <ls_publish>    type lty_s_publish,
+                 <ls_pub_hdr>    type prf_c_publ_hist,
+                 <ls_item_det>   type prf_c_item.
+
+  field-symbols: <ls_read>      type any.
+  field-symbols:<ls_powl_action> type powl_actdescr_sty.
+
+  clear: lt_headers, ls_headers.
+  loop at c_selected assigning <ls_selected>.
+
+    read table c_result_tab assigning <ls_read>
+                index <ls_selected>-tabix.
+    check sy-subrc eq 0.
+    assign component 'HEADER_KEY' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-header_key = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    assign component 'LATEST_VERSION' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-vers_no = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    assign component 'STATUS' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-status = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    append ls_headers to lt_headers.
+  endloop.
+
+
+  if i_actionid eq 'PUB'.
+    lv_test_run = abap_false.
+  else.
+    lv_test_run = abap_true.
+  endif.
+
+  convert date sy-datum time sy-uzeit into time stamp lv_timestamp time zone sy-zonlo.
+  clear c_selected.
+
+  if lt_headers[] is not initial.
+    select * from prf_c_header into table lt_headers_det for all entries in lt_headers
+                               where header_key = lt_headers-header_key.
+    if sy-subrc = 0 and lt_headers_det[] is not initial.
+      select * from prf_c_item into table lt_items_det for all entries in lt_headers_det
+                               where header_key = lt_headers_det-header_key and vers_no = lt_headers_det-latest_vers.
+      if sy-subrc ne 0.
+        message e106(prf_cntrl_msg) into ls_message_string.
+        update_powl_messages( importing et_messages = e_messages ).
+        return.
+      endif.
+    endif.
+    loop at lt_headers_det assigning <ls_header_det>.
+      ls_return-id = ac_msg_id.
+      ls_return-type = ac_info_msg.
+      ls_return-number = '017'.
+      ls_return-message_v1 = <ls_header_det>-header_key.
+      ls_return-message_v2 = <ls_header_det>-latest_vers.
+      ls_return-message_v3 = <ls_header_det>-src_doc_typ.
+      ls_return-message_v4 = <ls_header_det>-doc_no.
+      append ls_return to lt_return_log.
+      if 1 = 2."never going to happen, just for identifying error/status message from message class.
+        message i017(prf_cntrl_msg) with ls_msg-message_v1 ls_msg-message_v2 ls_msg-message_v3 ls_msg-message_v4.
+      endif.
+      clear ls_return.
+      read table lt_items_det assigning <ls_item_det> with key header_key = <ls_header_det>-header_key.
+      if sy-subrc ne 0.
+        ls_return-id = ac_msg_id.
+        ls_return-type = ac_error_msg.
+        ls_return-number = '018'.
+        ls_return-message_v1 = <ls_header_det>-header_key.
+        ls_return-message_v2 = <ls_header_det>-latest_vers.
+        ls_return-message_v3 = <ls_header_det>-src_doc_typ.
+        ls_return-message_v4 = <ls_header_det>-doc_no.
+        append ls_return to lt_return_log.
+        if 1 = 2."never going to happen, just for identifying error/status message from message class.
+          message e018(prf_cntrl_msg) with ls_msg-message_v1 ls_msg-message_v2 ls_msg-message_v3 ls_msg-message_v4.
+        endif.
+        clear ls_return.
+        continue.
+      endif.
+
+      if i_actionid eq 'PUB'.  " For regenearte xml this part is not required
+
+        lv_calling_source = prf_if_cust_helper=>prf_save_source-manual.
+        lv_cust_impl_class = get_impl_class(
+            iv_country    = <ls_header_det>-country
+            iv_cocode     = <ls_header_det>-compcode
+            iv_regm       = <ls_header_det>-prf_regm
+            iv_doc_type   = <ls_header_det>-src_doc_typ
+               ).
+
+         prf_cl_ui_scrn_assist=>decide_record_status(
+          exporting
+            iv_appl_run_mode   =  prf_if_cust_helper=>prf_appl_mode-edit   " Application mode
+            iv_call_source     =  lv_calling_source                   " Calling Source for Deciding status
+            iv_powl_trigger    = abap_true
+            iv_cust_impl_class =  lv_cust_impl_class
+            is_node_hdr_data   =  <ls_header_det>                       " Header table of PRF
+            is_node_item_data  =  <ls_item_det>                         " Item table for PRF
+          importing
+            ev_new_status      =  <ls_header_det>-status                " Status of PRF
+            ev_status_save     =  <ls_header_det>-saved_status_int      " Status of PRF
+            ev_publish_status  =  <ls_header_det>-published             " Checkbox
+            et_return          =  lt_return                           " Return parameter table
+        ).
+        append lines of lt_return to lt_return_log.
+        read table lt_return with key type = ac_error_msg transporting no fields.
+        if sy-subrc = 0.
+          refresh lt_return.
+          continue.
+        endif.
+      endif.
+
+      " Try to lock the record. if lock record is success append else set flag to indicate locking not possible for all records.
+      call method me->lock_record
+        exporting
+          is_header_det       = <ls_header_det>
+        importing
+          et_return           = lt_return
+          ev_locking_suceeded = lv_lock_success.
+      append lines of lt_return to lt_return_log.
+      if lv_lock_success = abap_true.
+        ls_published_det-header_key = <ls_header_det>-header_key.
+        ls_published_det-vers_no    = <ls_item_det>-vers_no.
+        ls_published_det-pub_tmstmp = lv_timestamp.
+        ls_published_det-payload_id = lv_payid.
+        ls_published_det-created_by = sy-uname.
+        append ls_published_det to lt_published_det.
+        clear ls_published_det.
+        <ls_header_det>-changed_by = sy-uname.
+        <ls_header_det>-changed_at = lv_timestamp.
+        append <ls_header_det> to lt_headers_final.
+        append <ls_item_det> to lt_items_final.
+      endif.
+    endloop.
+
+    " At this place we have all the records in table lt_headers_final and lt_items_final which was successfully locked and also new status determination was successful
+    " so clear the old tables to free up memory
+    if lt_published_det[] is not initial.
+      loop at lt_published_det into ls_published_det.
+        select single * from prf_chng_trig into ls_prf_chng_trig  where header_key eq ls_published_det-header_key
+                                                          and active_flag eq 'X' and publish_key = 'X'.
+        if  sy-subrc eq 0.
+          clear ls_prf_chng_trig-active_flag.
+          update prf_chng_trig from ls_prf_chng_trig.
+        endif.
+
+        clear ls_prf_chng_trig.
+        read table lt_headers_final into <ls_header_det> with key header_key = ls_published_det-header_key.
+        move-corresponding  <ls_header_det> to ls_prf_chng_trig.
+        read table lt_items_final into <ls_item_det> with key header_key = ls_published_det-header_key.
+        move-corresponding  <ls_item_det> to ls_prf_chng_trig.
+        ls_prf_chng_trig-create_date = sy-datum.
+        ls_prf_chng_trig-username = sy-uname.
+        ls_prf_chng_trig-create_time = sy-uzeit.
+        ls_prf_chng_trig-publish_key = 'X'.
+        ls_prf_chng_trig-active_flag = 'X'.
+        try.
+            " This will generate the PRF id and the timestamp
+            ls_prf_chng_trig-gui_id = cl_system_uuid=>create_uuid_c32_static( ).
+          catch cx_uuid_error into lruid_ex.
+            return.
+        endtry.
+        insert prf_chng_trig from ls_prf_chng_trig.
+      endloop.
+    endif.
+
+    refresh: lt_headers_det, lt_items_det, lt_headers.
+
+    "BAdI for POWL publish action
+    get badi lv_badi.
+    call badi lv_badi->powl_publish_action
+      exporting
+        i_applid            = i_applid
+        i_type              = i_type
+        i_actionid          = i_actionid
+        i_changed           = i_changed
+        i_action_index      = i_action_index
+        i_action_conf       = i_action_conf
+        i_ac_error_msg      = ac_error_msg
+        i_ac_status_msg     = ac_status_msg
+        i_at_control_info   = at_control_info
+        i_ac_rejected       = ac_rejected
+        i_ac_msg_id         = ac_msg_id
+        i_additional_data   = i_additional_data
+        i_visible_fields    = i_visible_fields
+        lv_timestamp        = lv_timestamp
+        iv_test_run         = lv_test_run
+      changing
+        e_messages          = e_messages
+        e_do_refresh        = e_do_refresh
+        e_changes_processed = e_changes_processed
+        ct_return_log       = lt_return_log
+        ct_headers_final    = lt_headers_final
+        ct_items_final      = lt_items_final
+        ct_publish_det      = lt_published_det.
+
+    loop at lt_headers_final assigning <ls_header_det>.
+      call method me->unlock_record
+        exporting
+*         IS_HEADER_DET = <ls_header_det>
+          iv_doc_type = <ls_header_det>-src_doc_typ
+          iv_hdr_key  = <ls_header_det>-header_key
+          iv_doc_no   = <ls_header_det>-doc_no.
+    endloop.
+
+    if lt_return_log[] is not initial and lr_appl_log is bound.
+      lr_appl_log->add_bapi_messages(
+        exporting
+          it_messages      = lt_return_log    " Return parameter table
+*               iv_problem_class = AC_PROBCLASS_DEFAULT    " Application log: Message problem class
+      ).
+      lr_appl_log->finalize_and_save( ).
+      refresh lt_return_log.
+    endif.
+  else.
+    message e014(prf_cntrl_msg) into ls_message_string.
+    update_powl_messages( importing et_messages = e_messages ).
+    return.
+  endif.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->READY_PUBLISH
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER(optional)
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY(optional)
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY(optional)
+* | [--->] I_ACTIONID                     TYPE        POWL_ACTIONID_TY(optional)
+* | [--->] I_CHANGED                      TYPE        POWL_CHANGEINFO_TTY(optional)
+* | [--->] I_ACTION_INDEX                 LIKE        SY-TABIX(optional)
+* | [--->] I_ACTION_CONF                  TYPE        POWL_ACTION_CONF_TY(optional)
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_ADDITIONAL_DATA              TYPE        DATA(optional)
+* | [--->] I_VISIBLE_FIELDS               TYPE        POWL_VISIBLE_COLS_TTY(optional)
+* | [<---] E_PORTAL_ACTIONS               TYPE        POWL_FOLLOW_UP_STY
+* | [<---] E_MESSAGES                     TYPE        POWL_MSG_TTY
+* | [<---] E_DO_REFRESH                   TYPE        POWL_XFLAG_TY
+* | [<---] E_RESULT_LINES_CHANGED         TYPE        POWL_XFLAG_TY
+* | [<---] E_CHANGES_PROCESSED            TYPE        POWL_XFLAG_TY
+* | [<---] E_SELECTED_CHANGED             TYPE        POWL_XFLAG_TY
+* | [<---] E_ACTIONS_CHANGED              TYPE        POWL_XFLAG_TY
+* | [<-->] C_SELECTED                     TYPE        RSTABIXTAB(optional)
+* | [<-->] C_RESULT_TAB                   TYPE        INDEX TABLE(optional)
+* | [<-->] C_WORKFLOW_RESULT_COUNT        TYPE        POWL_COUNT_TY(optional)
+* | [<-->] C_ACTION_DEFS                  TYPE        POWL_ACTDESCR_TTY(optional)
+* | [<-->] C_FIRST_VISIBLE_ROW            TYPE        SY-TABIX(optional)
+* | [<-->] C_FIRST_VISIBLE_SCROLL_COL     TYPE        STRING(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method ready_publish.
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+  data: ls_prf_chng_trig type prf_chng_trig,
+        lruid_ex         type ref to cx_uuid_error.
+*
+  types: begin of lty_s_headers,
+           header_key type prf_s_header-header_key,
+           vers_no    type prf_s_item-vers_no,
+           status     type prf_s_header-status,
+         end of lty_s_headers,
+         lty_t_headers type standard table of lty_s_headers.
+  types: begin of lty_s_publish,
+           header_key type prf_s_header-header_key,
+           prf_id     type prf_s_header-prf_id,
+           vers_no    type prf_s_item-vers_no,
+           payload_id type prf_c_publ_hist-payload_id,
+         end of  lty_s_publish,
+         lty_t_publish type standard table of lty_s_publish.
+
+  data: lr_appl_log        type ref to prf_cl_appl_log,
+        lt_headers         type lty_t_headers,
+        ls_headers         type lty_s_headers,
+        lt_published_det   type standard table of prf_c_publ_hist,
+        lt_headers_det     type standard table of prf_c_header,
+        lt_items_det       type standard table of prf_c_item,
+        lt_headers_final   type standard table of prf_c_header,
+        lt_items_final     type standard table of prf_c_item,
+        lt_return          type bapiret2_t,
+        lt_return_log      type bapiret2_t,
+        ls_msg             type powl_msg_sty,
+        ls_published_det   type prf_c_publ_hist,
+        ls_return          type bapiret2,
+        lv_payid           type string,
+        lv_timetmp         type string,
+        lv_timestamp       type timestamp,
+        lv_cust_impl_class type prf_hlpr_impl_classname,
+        lv_lock_success    type xfeld,
+        lv_calling_source  type prf_call_source,
+        lv_badi            type ref to prf_powl_publish_action,
+        lt_payloadid       type standard table of prf_c_publ_hist-payload_id,
+        lv_payloadid       type prf_c_publ_hist-payload_id,
+        ls_publish         type lty_s_publish,
+        lt_publish         type lty_t_publish,
+        lt_pub_hist_rec    type lty_t_publish,
+        ls_header_repub    type prf_c_header,
+        ls_item_repub      type prf_c_item,
+        lt_header_repub    type standard table of prf_c_header,
+        lt_item_repub      type standard table of prf_c_item,
+        lv_timestmp        type string,
+        lt_prf_publ_hist   type standard table of prf_c_publ_hist,
+        lv_indx            type sytabix,
+        ls_prf_publ_hist   type prf_c_publ_hist,
+        lv_payload_id      type string.
+
+  data: lv_test_run  type abap_bool.
+
+  data: ls_message_string  type string.
+
+  field-symbols: <ls_any>       type any,
+                 <lv_any_field> type any,
+                 <ls_selected>  type rstabix.
+  field-symbols:              <ls_header_det> type prf_c_header.
+*                 <ls_publish>    TYPE lty_s_publish,
+*                 <ls_pub_hdr>    TYPE prf_c_publ_hist,
+  field-symbols:   <ls_item_det>   type prf_c_item.
+
+  field-symbols: <ls_read>      type any.
+*  FIELD-SYMBOLS:<ls_powl_action> TYPE powl_actdescr_sty.
+*
+  loop at c_selected assigning <ls_selected>.
+
+    read table c_result_tab assigning <ls_read>
+                index <ls_selected>-tabix.
+    check sy-subrc eq 0.
+    assign component 'HEADER_KEY' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-header_key = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    assign component 'LATEST_VERSION' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-vers_no = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    assign component 'STATUS' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_headers-status = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    append ls_headers to lt_headers.
+  endloop.
+*
+
+
+  clear c_selected.
+  if lt_headers[] is not initial.
+    convert date sy-datum time sy-uzeit into time stamp lv_timestamp time zone sy-zonlo.
+    select * from prf_c_header into table lt_headers_det for all entries in lt_headers
+                               where header_key = lt_headers-header_key.
+    if sy-subrc = 0 and lt_headers_det[] is not initial.
+      select * from prf_c_item into table lt_items_det for all entries in lt_headers_det
+                               where header_key = lt_headers_det-header_key and vers_no = lt_headers_det-latest_vers.
+      if sy-subrc ne 0.
+        message e106(prf_cntrl_msg) into ls_message_string.
+        update_powl_messages( importing et_messages = e_messages ).
+        return.
+      endif.
+    endif.
+
+    loop at lt_headers_det assigning <ls_header_det>.
+      message i017(prf_cntrl_msg) with <ls_header_det>-header_key <ls_header_det>-latest_vers <ls_header_det>-src_doc_typ <ls_header_det>-doc_no
+       into ls_message_string.
+      zcl_prf_powl_feeder=>update_return_log( changing et_return_log = lt_return_log   ).
+
+      read table lt_items_det assigning <ls_item_det> with key header_key = <ls_header_det>-header_key vers_no = <ls_header_det>-latest_vers.
+      if sy-subrc ne 0.
+        message e018(prf_cntrl_msg) with <ls_header_det>-header_key <ls_header_det>-latest_vers <ls_header_det>-src_doc_typ <ls_header_det>-doc_no.
+        zcl_prf_powl_feeder=>update_return_log( changing et_return_log = lt_return_log   ).
+        continue.
+      endif.
+
+      lv_calling_source = prf_if_cust_helper=>prf_save_source-manual.
+
+      lv_cust_impl_class = get_impl_class(
+                               iv_country    = <ls_header_det>-country
+                               iv_cocode     = <ls_header_det>-compcode
+                               iv_regm       = <ls_header_det>-prf_regm
+                               iv_doc_type   = <ls_header_det>-src_doc_typ
+                           ).
+
+      prf_cl_ui_scrn_assist=>decide_record_status(
+        exporting
+          iv_appl_run_mode   =  prf_if_cust_helper=>prf_appl_mode-edit   " Application mode
+          iv_call_source     =  lv_calling_source                        " Calling Source for Deciding status
+          iv_cust_impl_class =  lv_cust_impl_class
+          is_node_hdr_data   =  <ls_header_det>                             " Header table of PRF
+          is_node_item_data  =  <ls_item_det>                               " Item table for PRF
+        importing
+          ev_new_status      =  <ls_header_det>-status                " Status of PRF
+          ev_status_save     =  <ls_header_det>-saved_status_int      " Status of PRF
+          ev_publish_status  =  <ls_header_det>-published             " Checkbox
+          et_return          =  lt_return                           " Return parameter table
+      ).
+
+      append lines of lt_return to lt_return_log.
+      read table lt_return with key type = ac_error_msg transporting no fields.
+      if sy-subrc = 0.
+        refresh lt_return.
+        continue.
+      endif.
+
+      " Lock the source documents & prf record before doing processing.
+      call method me->lock_record
+        exporting
+          is_header_det       = <ls_header_det>
+        importing
+          et_return           = lt_return
+          ev_locking_suceeded = lv_lock_success.
+      append lines of lt_return to lt_return_log.
+
+      if lv_lock_success = abap_true.
+        ls_published_det-header_key = <ls_header_det>-header_key.
+        ls_published_det-vers_no    = <ls_item_det>-vers_no.
+        ls_published_det-pub_tmstmp = lv_timestamp.
+        ls_published_det-payload_id = lv_payid.
+        ls_published_det-created_by = sy-uname.
+        append ls_published_det to lt_published_det.
+        clear ls_published_det.
+        <ls_header_det>-changed_by = sy-uname.
+        <ls_header_det>-changed_at = lv_timestamp.
+        append <ls_header_det> to lt_headers_final.
+        append <ls_item_det> to lt_items_final.
+      endif.
+    endloop.
+
+    " At this place we have all the records in table lt_headers_final and lt_items_final which was successfully locked and also new status determination was successful
+    " so clear the old tables to free up memory
+    refresh: lt_headers_det, lt_items_det, lt_headers.
+
+* Have to add enhancement
+    lv_payid = lv_timestamp.
+    ls_published_det-payload_id = lv_payid.
+    modify lt_published_det from ls_published_det transporting payload_id where pub_tmstmp = lv_timestamp.
+
+    if lt_headers_final[] is not initial.
+      modify prf_c_header from table lt_headers_final.
+      if sy-subrc = 0.
+        insert prf_c_publ_hist from table lt_published_det.
+        if sy-subrc = 0.
+          message s022(prf_cntrl_msg) into ls_message_string.
+          update_powl_messages( importing et_messages = e_messages ).
+          zcl_prf_powl_feeder=>update_return_log( changing et_return_log = lt_return_log   ).
+          e_do_refresh = 'X'.
+
+        else.
+          rollback work.
+          message e010(prf_cntrl_msg) into ls_message_string.
+          update_powl_messages( importing et_messages = e_messages ).
+          zcl_prf_powl_feeder=>update_return_log( changing et_return_log = lt_return_log   ).
+        endif.
+      else.
+        message e010(prf_cntrl_msg) into ls_message_string.
+        update_powl_messages( importing et_messages = e_messages ).
+        zcl_prf_powl_feeder=>update_return_log( changing et_return_log = lt_return_log   ).
+      endif.
+      loop at lt_headers_final assigning <ls_header_det>.
+        call method me->unlock_record
+          exporting
+*           IS_HEADER_DET = <ls_header_det>
+            iv_doc_type = <ls_header_det>-src_doc_typ
+            iv_hdr_key  = <ls_header_det>-header_key
+            iv_doc_no   = <ls_header_det>-doc_no.
+      endloop.
+    else.
+      message e020(prf_cntrl_msg) into ls_message_string.
+      update_powl_messages( importing et_messages = e_messages ).
+      zcl_prf_powl_feeder=>update_return_log( changing et_return_log = lt_return_log   ).
+    endif.
+* End Enhancement
+
+    if lt_return_log[] is not initial and lr_appl_log is bound.
+      lr_appl_log->add_bapi_messages(
+        exporting
+          it_messages      = lt_return_log    " Return parameter table
+*               iv_problem_class = AC_PROBCLASS_DEFAULT    " Application log: Message problem class
+      ).
+      lr_appl_log->finalize_and_save( ).
+      refresh lt_return_log.
+    endif.
+  else.
+    message e021(prf_cntrl_msg) into ls_message_string.
+    update_powl_messages( importing et_messages = e_messages ).
+  endif.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->REGENERATE_XML
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER(optional)
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY(optional)
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY(optional)
+* | [--->] I_ACTIONID                     TYPE        POWL_ACTIONID_TY(optional)
+* | [--->] I_CHANGED                      TYPE        POWL_CHANGEINFO_TTY(optional)
+* | [--->] I_ACTION_INDEX                 LIKE        SY-TABIX(optional)
+* | [--->] I_ACTION_CONF                  TYPE        POWL_ACTION_CONF_TY(optional)
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_ADDITIONAL_DATA              TYPE        DATA(optional)
+* | [--->] I_VISIBLE_FIELDS               TYPE        POWL_VISIBLE_COLS_TTY(optional)
+* | [<---] E_PORTAL_ACTIONS               TYPE        POWL_FOLLOW_UP_STY
+* | [<---] E_MESSAGES                     TYPE        POWL_MSG_TTY
+* | [<---] E_DO_REFRESH                   TYPE        POWL_XFLAG_TY
+* | [<---] E_RESULT_LINES_CHANGED         TYPE        POWL_XFLAG_TY
+* | [<---] E_CHANGES_PROCESSED            TYPE        POWL_XFLAG_TY
+* | [<---] E_SELECTED_CHANGED             TYPE        POWL_XFLAG_TY
+* | [<---] E_ACTIONS_CHANGED              TYPE        POWL_XFLAG_TY
+* | [<-->] C_SELECTED                     TYPE        RSTABIXTAB(optional)
+* | [<-->] C_RESULT_TAB                   TYPE        INDEX TABLE(optional)
+* | [<-->] C_WORKFLOW_RESULT_COUNT        TYPE        POWL_COUNT_TY(optional)
+* | [<-->] C_ACTION_DEFS                  TYPE        POWL_ACTDESCR_TTY(optional)
+* | [<-->] C_FIRST_VISIBLE_ROW            TYPE        SY-TABIX(optional)
+* | [<-->] C_FIRST_VISIBLE_SCROLL_COL     TYPE        STRING(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method regenerate_xml.
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+  data: ls_prf_chng_trig type prf_chng_trig,
+        lruid_ex         type ref to cx_uuid_error.
+*
+  types: begin of lty_s_headers,
+           header_key type prf_s_header-header_key,
+           vers_no    type prf_s_item-vers_no,
+           status     type prf_s_header-status,
+         end of lty_s_headers,
+         lty_t_headers type standard table of lty_s_headers.
+  types: begin of lty_s_publish,
+           header_key type prf_s_header-header_key,
+           prf_id     type prf_s_header-prf_id,
+           vers_no    type prf_s_item-vers_no,
+           payload_id type prf_c_publ_hist-payload_id,
+         end of  lty_s_publish,
+         lty_t_publish type standard table of lty_s_publish.
+
+  data: lr_appl_log        type ref to prf_cl_appl_log,
+        lt_headers         type lty_t_headers,
+        ls_headers         type lty_s_headers,
+        lt_published_det   type standard table of prf_c_publ_hist,
+        lt_headers_det     type standard table of prf_c_header,
+        lt_items_det       type standard table of prf_c_item,
+        lt_headers_final   type standard table of prf_c_header,
+        lt_items_final     type standard table of prf_c_item,
+        lt_return          type bapiret2_t,
+        lt_return_log      type bapiret2_t,
+        ls_msg             type powl_msg_sty,
+        ls_published_det   type prf_c_publ_hist,
+        ls_return          type bapiret2,
+        lv_payid           type string,
+        lv_timetmp         type string,
+        lv_timestamp       type timestamp,
+        lv_cust_impl_class type prf_hlpr_impl_classname,
+        lv_lock_success    type xfeld,
+        lv_calling_source  type prf_call_source,
+        lv_badi            type ref to prf_powl_publish_action,
+        lt_payloadid       type standard table of prf_c_publ_hist-payload_id,
+        lv_payloadid       type prf_c_publ_hist-payload_id,
+        ls_publish         type lty_s_publish,
+        lt_publish         type lty_t_publish,
+        lt_pub_hist_rec    type lty_t_publish,
+        ls_header_repub    type prf_c_header,
+        ls_item_repub      type prf_c_item,
+        lt_header_repub    type standard table of prf_c_header,
+        lt_item_repub      type standard table of prf_c_item,
+        lv_timestmp        type string,
+        lt_prf_publ_hist   type standard table of prf_c_publ_hist,
+        lv_indx            type sytabix,
+        ls_prf_publ_hist   type prf_c_publ_hist,
+        lv_payload_id      type string.
+
+  data: lv_test_run  type abap_bool.
+
+  data: ls_message_string  type string.
+
+  field-symbols: <ls_any>        type any,
+                 <lv_any_field>  type any,
+                 <ls_selected>   type rstabix,
+                 <ls_header_det> type prf_c_header,
+                 <ls_publish>    type lty_s_publish,
+                 <ls_pub_hdr>    type prf_c_publ_hist,
+                 <ls_item_det>   type prf_c_item.
+
+  field-symbols: <ls_read>      type any.
+  field-symbols:<ls_powl_action> type powl_actdescr_sty.
+
+  clear: lt_headers, ls_headers.
+
+  loop at c_selected assigning <ls_selected>.
+
+    read table c_result_tab assigning <ls_read>
+                index <ls_selected>-tabix.
+    check sy-subrc eq 0.
+
+    assign component 'PAYLOAD_ID' of structure <ls_read> to <lv_any_field>.
+
+    if <lv_any_field> is assigned.
+      ls_publish-payload_id = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    assign component 'PRF_ID' of structure <ls_read> to <lv_any_field>.
+
+    if <lv_any_field> is assigned.
+      ls_publish-prf_id = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    assign component 'HEADER_KEY' of structure <ls_read> to <lv_any_field>.
+
+    if <lv_any_field> is assigned.
+      ls_publish-header_key = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+
+    assign component 'VERS_NO' of structure <ls_read> to <lv_any_field>.
+    if <lv_any_field> is assigned.
+      ls_publish-vers_no = <lv_any_field>.
+      unassign <lv_any_field>.
+    endif.
+    append ls_publish to lt_publish.
+  endloop.
+  clear c_selected.
+
+
+  if lt_publish is not initial.
+
+    sort lt_publish ascending by payload_id.
+
+    delete adjacent duplicates from lt_publish.
+
+    select * from prf_c_publ_hist into table lt_prf_publ_hist for all entries in lt_publish
+                               where payload_id = lt_publish-payload_id.
+    sort lt_prf_publ_hist by payload_id.
+    loop at lt_publish assigning <ls_publish>.
+      refresh lt_pub_hist_rec.
+      loop at lt_prf_publ_hist assigning <ls_pub_hdr> from lv_indx where payload_id = <ls_publish>-payload_id.
+        lv_indx = sy-tabix.
+        move-corresponding <ls_pub_hdr> to ls_publish.
+        append ls_publish to lt_pub_hist_rec.
+        lv_timestmp = <ls_pub_hdr>-pub_tmstmp.
+      endloop.
+
+      if lt_pub_hist_rec[] is not initial.
+        select * from prf_c_header into table lt_header_repub for all entries in lt_pub_hist_rec
+          where  header_key = lt_pub_hist_rec-header_key.
+
+        select * from prf_c_item into table lt_item_repub for all entries in lt_pub_hist_rec
+          where  header_key = lt_pub_hist_rec-header_key and vers_no = lt_pub_hist_rec-vers_no.
+      endif.
+
+      lv_payload_id = <ls_publish>-payload_id.
+
+      call method prf_cl_itab_to_xml=>process_data_to_xml(
+        exporting
+          it_header_det     = lt_header_repub
+          it_item_det       = lt_item_repub
+        changing
+          cv_payload_id     = lv_payload_id
+          cv_timestamp_info = lv_timestmp ).
+
+    endloop.
+  endif.
+
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->REJECT
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] I_USERNAME                     TYPE        XUSER(optional)
+* | [--->] I_APPLID                       TYPE        POWL_APPLID_TY(optional)
+* | [--->] I_TYPE                         TYPE        POWL_TYPE_TY(optional)
+* | [--->] I_ACTIONID                     TYPE        POWL_ACTIONID_TY(optional)
+* | [--->] I_CHANGED                      TYPE        POWL_CHANGEINFO_TTY(optional)
+* | [--->] I_ACTION_INDEX                 LIKE        SY-TABIX(optional)
+* | [--->] I_ACTION_CONF                  TYPE        POWL_ACTION_CONF_TY(optional)
+* | [--->] I_LANGU                        TYPE        LANGU (default =SY-LANGU)
+* | [--->] I_ADDITIONAL_DATA              TYPE        DATA(optional)
+* | [--->] I_VISIBLE_FIELDS               TYPE        POWL_VISIBLE_COLS_TTY(optional)
+* | [<---] E_PORTAL_ACTIONS               TYPE        POWL_FOLLOW_UP_STY
+* | [<---] E_MESSAGES                     TYPE        POWL_MSG_TTY
+* | [<---] E_DO_REFRESH                   TYPE        POWL_XFLAG_TY
+* | [<---] E_RESULT_LINES_CHANGED         TYPE        POWL_XFLAG_TY
+* | [<---] E_CHANGES_PROCESSED            TYPE        POWL_XFLAG_TY
+* | [<---] E_SELECTED_CHANGED             TYPE        POWL_XFLAG_TY
+* | [<---] E_ACTIONS_CHANGED              TYPE        POWL_XFLAG_TY
+* | [<-->] C_SELECTED                     TYPE        RSTABIXTAB(optional)
+* | [<-->] C_RESULT_TAB                   TYPE        INDEX TABLE(optional)
+* | [<-->] C_WORKFLOW_RESULT_COUNT        TYPE        POWL_COUNT_TY(optional)
+* | [<-->] C_ACTION_DEFS                  TYPE        POWL_ACTDESCR_TTY(optional)
+* | [<-->] C_FIRST_VISIBLE_ROW            TYPE        SY-TABIX(optional)
+* | [<-->] C_FIRST_VISIBLE_SCROLL_COL     TYPE        STRING(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method reject.
+  data: lr_fpm type ref to if_fpm.
+  data: lr_event type ref to cl_fpm_event.
+  data: lr_data type ref to if_fpm_parameter.
+  data: ls_data type zprf_action_reason_form.
+  data: lr_badi_ref type ref to zprf_powl_enhancements.
+  data: ls_prf_chng_trig type prf_chng_trig,
+        lruid_ex         type ref to cx_uuid_error.
+*
+  types: begin of lty_s_headers,
+           header_key type prf_s_header-header_key,
+           vers_no    type prf_s_item-vers_no,
+           status     type prf_s_header-status,
+         end of lty_s_headers,
+         lty_t_headers type standard table of lty_s_headers.
+
+  data: lr_appl_log        type ref to prf_cl_appl_log,
+        lt_headers         type lty_t_headers,
+        ls_headers         type lty_s_headers,
+        lt_published_det   type standard table of prf_c_publ_hist,
+        lt_headers_det     type standard table of prf_c_header,
+        lt_items_det       type standard table of prf_c_item,
+        lt_headers_final   type standard table of prf_c_header,
+        lt_items_final     type standard table of prf_c_item,
+        lt_return          type bapiret2_t,
+        lt_return_log      type bapiret2_t,
+        ls_msg             type powl_msg_sty,
+        ls_return          type bapiret2,
+        lv_payid           type string,
+        lv_timetmp         type string,
+        lv_timestamp       type timestamp,
+        lv_cust_impl_class type prf_hlpr_impl_classname,
+        lv_lock_success    type xfeld,
+        lv_calling_source  type prf_call_source,
+        lv_badi            type ref to prf_powl_publish_action,
+        lt_payloadid       type standard table of prf_c_publ_hist-payload_id,
+        lv_payloadid       type prf_c_publ_hist-payload_id,
+        ls_header_repub    type prf_c_header,
+        ls_item_repub      type prf_c_item,
+        lt_header_repub    type standard table of prf_c_header,
+        lt_item_repub      type standard table of prf_c_item,
+        lv_timestmp        type string,
+        lt_prf_publ_hist   type standard table of prf_c_publ_hist,
+        lv_indx            type sytabix,
+        ls_prf_publ_hist   type prf_c_publ_hist,
+        lv_payload_id      type string.
+
+  data: lv_test_run  type abap_bool.
+
+  data: ls_message_string  type string.
+
+  field-symbols: <ls_any>       type any,
+                 <lv_any_field> type any,
+                 <ls_selected>  type rstabix.
+  field-symbols:              <ls_header_det> type prf_c_header.
+*                 <ls_publish>    TYPE lty_s_publish,
+*                 <ls_pub_hdr>    TYPE prf_c_publ_hist,
+  field-symbols:   <ls_item_det>   type prf_c_item.
+
+  field-symbols: <ls_read>      type any.
+
+  field-symbols: <l_additional_data> type zprf_action_reason_form.
+  data: ls_prf_record type prf_c_header.
+  data: lr_prf_record type ref to zcl_prf_record.
+
+*  CHECK i_action_conf = 'Y'.
+
+  if i_additional_data is initial.
+    e_portal_actions-launch_editor = abap_true.
+  else.
+    assign i_additional_data->* to <l_additional_data>.
+    if <l_additional_data>-action = i_actionid.
+      clear: lt_headers, ls_headers.
+      loop at c_selected assigning <ls_selected>.
+
+        read table c_result_tab assigning <ls_read>
+                    index <ls_selected>-tabix.
+        check sy-subrc eq 0.
+        assign component 'HEADER_KEY' of structure <ls_read> to <lv_any_field>.
+        if <lv_any_field> is assigned.
+          ls_headers-header_key = <lv_any_field>.
+          unassign <lv_any_field>.
+        endif.
+        assign component 'LATEST_VERSION' of structure <ls_read> to <lv_any_field>.
+        if <lv_any_field> is assigned.
+          ls_headers-vers_no = <lv_any_field>.
+          unassign <lv_any_field>.
+        endif.
+        assign component 'STATUS' of structure <ls_read> to <lv_any_field>.
+        if <lv_any_field> is assigned.
+          ls_headers-status = <lv_any_field>.
+          unassign <lv_any_field>.
+        endif.
+        append ls_headers to lt_headers.
+      endloop.
+
+
+      if lt_headers[] is not initial.
+        convert date sy-datum time sy-uzeit into time stamp lv_timestamp time zone sy-zonlo.
+        select * from prf_c_header into table lt_headers_det for all entries in lt_headers where header_key = lt_headers-header_key.
+        if sy-subrc = 0 and lt_headers_det[] is not initial.
+          loop at lt_headers_det assigning <ls_header_det>.
+            <ls_header_det>-approval_status = ac_rejected.
+            <ls_header_det>-changed_by = sy-uname.
+            <ls_header_det>-changed_at = lv_timestamp.
+            " Lock the source documents & prf record before doing processing.
+            call method me->lock_record
+              exporting
+                is_header_det       = <ls_header_det>
+              importing
+                et_return           = lt_return
+                ev_locking_suceeded = lv_lock_success.
+          endloop.
+
+          if lt_return is initial.
+
+            modify prf_c_header from table lt_headers_det.
+            if sy-subrc = 0.
+              message s008(prf_cntrl_msg) into ls_message_string.
+              update_powl_messages( importing et_messages = e_messages ).
+              e_do_refresh = 'X'.
+*                 To unlock records after processing
+              loop at lt_headers_det assigning <ls_header_det>.
+                call method me->unlock_record
+                  exporting
+                    iv_doc_type = <ls_header_det>-src_doc_typ
+                    iv_hdr_key  = <ls_header_det>-header_key
+                    iv_doc_no   = <ls_header_det>-doc_no.
+              endloop.
+
+              loop at lt_headers_det into ls_prf_record.
+                zcl_prf_record=>create_event(
+                  iv_header_key = ls_prf_record-header_key
+                  iv_event = zcl_prf_record=>e_event-rejected
+                  iv_reason = <l_additional_data>-action_reason
+                ).
+              endloop.
+            else.
+              message e010(prf_cntrl_msg) into ls_message_string.
+              update_powl_messages( importing et_messages = e_messages ).
+              return.
+            endif.
+          else. " for lt_return
+            loop at lt_return into ls_return.
+              ls_msg-msgid = ls_return-id.
+              ls_msg-msgtype = ls_return-type.
+              ls_msg-msgnumber = ls_return-number.
+              ls_msg-message_v1 = ls_return-message_v1.
+              ls_msg-message = ls_return-message.
+              append ls_msg to e_messages.
+            endloop.
+          endif.
+        else.
+          message e010(prf_cntrl_msg) into ls_message_string.
+          update_powl_messages( importing et_messages = e_messages ).
+          return.
+        endif.
+      else.
+        message e013(prf_cntrl_msg) into ls_message_string.
+        update_powl_messages( importing et_messages = e_messages ).
+      endif.
+    endif.
+  endif.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_PRF_POWL_FEEDER->UNLOCK_RECORD
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_DOC_TYPE                    TYPE        PRF_REGM_DOC_TYPE
+* | [--->] IV_HDR_KEY                     TYPE        PRF_S_HEADER-HEADER_KEY
+* | [--->] IV_DOC_NO                      TYPE        PRF_REGM_DOC_NO
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method unlock_record.
+
+    case iv_doc_type.
+      when '01' or '02'.
+        data: lv_ebeln type ekko-ebeln.
+        lv_ebeln = iv_doc_no.
+        call function 'DEQUEUE_EMEKKOE'
+          exporting
+            mode_ekko = 'E'
+            mode_ekpo = 'E'
+            mandt     = sy-mandt
+            ebeln     = lv_ebeln.
+
+      when '06'.
+        data: lv_ebeln_fi type belnr_d.
+        lv_ebeln_fi = iv_doc_no.
+
+        call function 'DEQUEUE_EFVIBSEG'
+          exporting
+            mode_bseg = 'E'
+            mandt     = sy-mandt
+            belnr     = lv_ebeln_fi.
+
+        call function 'DEQUEUE_EFBKPF'
+          exporting
+            mode_bkpf = 'E'
+            mandt     = sy-mandt
+            belnr     = lv_ebeln_fi.
+    endcase.
+
+    call function 'DEQUEUE_EPRF_LOCK'
+      exporting
+        mode_prf_c_header = 'E'
+        mandt             = sy-mandt
+        header_key        = iv_hdr_key.
+
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Private Method ZCL_PRF_POWL_FEEDER=>UPDATE_POWL_MESSAGES
+* +-------------------------------------------------------------------------------------------------+
+* | [<---] ET_MESSAGES                    TYPE        POWL_MSG_TTY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method update_powl_messages.
+      data: ls_msg type powl_msg_sty.
+      clear ls_msg.
+      ls_msg-msgid = sy-msgid.
+      ls_msg-msgtype = sy-msgty.
+      ls_msg-msgnumber = sy-msgno.
+      ls_msg-message_v1 = sy-subrc.
+      append ls_msg to et_messages.
+
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Private Method ZCL_PRF_POWL_FEEDER=>UPDATE_RETURN_LOG
+* +-------------------------------------------------------------------------------------------------+
+* | [<-->] ET_RETURN_LOG                  TYPE        BAPIRET2_T
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method update_return_log.
+      data: ls_return          type bapiret2.
+
+      ls_return-id = sy-msgid.
+      ls_return-type = sy-msgty.
+      ls_return-number = sy-msgno.
+      ls_return-message_v1 = sy-msgv1.
+      ls_return-message_v2 = sy-msgv2.
+      ls_return-message_v3 = sy-msgv3.
+      ls_return-message_v4 = sy-msgv3.
+      append ls_return to et_return_log.
+
+  endmethod.
+endclass.
